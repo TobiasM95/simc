@@ -16,19 +16,19 @@
 #include "player/player.hpp"
 #include "player/spawner_base.hpp"
 #include "player/unique_gear.hpp"
+#include "profileset.hpp"
+#include "report/highchart.hpp"
 #include "report/json/report_configuration.hpp"
 #include "report/reports.hpp"
-#include "report/highchart.hpp"
-#include "profileset.hpp"
+#include "sim/cooldown.hpp"
 #include "sim/event.hpp"
+#include "sim/expressions.hpp"
 #include "sim/iteration_data_entry.hpp"
+#include "sim/option.hpp"
 #include "sim/plot.hpp"
+#include "sim/profileset.hpp"
 #include "sim/raid_event.hpp"
 #include "sim/reforge_plot.hpp"
-#include "sim/cooldown.hpp"
-#include "sim/expressions.hpp"
-#include "sim/option.hpp"
-#include "sim/profileset.hpp"
 #include "sim/scale_factor_control.hpp"
 #include "sim/sim_control.hpp"
 #include "sim/work_queue.hpp"
@@ -43,11 +43,11 @@
 #include <direct.h>
 #endif
 
-namespace { // UNNAMED NAMESPACE ============================================
+namespace
+{  // UNNAMED NAMESPACE ============================================
 
 // Comparator for iteration data entry sorting (see analyze_iteration_data)
-bool iteration_data_cmp( const iteration_data_entry_t& a,
-                         const iteration_data_entry_t& b )
+bool iteration_data_cmp( const iteration_data_entry_t& a, const iteration_data_entry_t& b )
 {
   if ( a.metric > b.metric )
   {
@@ -68,8 +68,7 @@ bool iteration_data_cmp( const iteration_data_entry_t& a,
   return false;
 }
 
-bool iteration_data_cmp_r( const iteration_data_entry_t& a,
-                          const iteration_data_entry_t& b )
+bool iteration_data_cmp_r( const iteration_data_entry_t& a, const iteration_data_entry_t& b )
 {
   if ( a.metric > b.metric )
   {
@@ -95,10 +94,13 @@ struct seed_predicate_t
   uint64_t seed;
 
   seed_predicate_t( uint64_t seed_ ) : seed( seed_ )
-  { }
+  {
+  }
 
   bool operator()( const iteration_data_entry_t& e ) const
-  { return e.seed == seed; }
+  {
+    return e.seed == seed;
+  }
 };
 
 // parse_debug_seed =========================================================
@@ -109,12 +111,11 @@ bool parse_debug_seed( sim_t* sim, util::string_view, util::string_view value )
 
   for ( const auto& seed_str : split )
   {
-
     uint64_t seed = std::stoull( seed_str );
-    sim -> debug_seed.push_back( seed );
+    sim->debug_seed.push_back( seed );
   }
 
-  range::sort( sim -> debug_seed );
+  range::sort( sim->debug_seed );
 
   if ( sim->debug_seed.empty() )
   {
@@ -132,7 +133,8 @@ bool parse_debug_seed( sim_t* sim, util::string_view, util::string_view value )
  * destination: path to which the report is written.
  *
  * Valid options:
- * - version [string]: Requested report version, which follow semver. This option can be a specific report version, or a semver interval like ">=2.0.0".
+ * - version [string]: Requested report version, which follow semver. This option can be a specific report version, or a
+ * semver interval like ">=2.0.0".
  * - full_states [bool]: Collects and reports full action and other states, greatly increasing the report size.
  * - pretty_print [bool]: Pretty-print (whitespaces and indentation) the report.
  * - decimal_places [int]: limit floating point decimal places. Valid if > 0
@@ -146,10 +148,10 @@ bool parse_json_reports( sim_t* sim, util::string_view /* option_name */, util::
     throw sc_invalid_sim_argument( "Missing JSON report output file name." );
   }
 
-  auto destination = splits[0];
+  auto destination = splits[ 0 ];
   std::string report_version;
-  bool fullStates = false;
-  bool pretty_print = false;
+  bool fullStates    = false;
+  bool pretty_print  = false;
   int decimal_places = 0;
   if ( splits.size() > 1 )
   {
@@ -208,10 +210,10 @@ bool parse_json_reports( sim_t* sim, util::string_view /* option_name */, util::
     }
   }
 
-  auto entry = report::json::create_report_entry( *sim, std::move(report_version), std::string(destination) );
-  entry.full_states = fullStates;
+  auto entry = report::json::create_report_entry( *sim, std::move( report_version ), std::string( destination ) );
+  entry.full_states    = fullStates;
   entry.decimal_places = decimal_places;
-  entry.pretty_print = pretty_print;
+  entry.pretty_print   = pretty_print;
 
   sim->json_reports.push_back( std::move( entry ) );
 
@@ -221,38 +223,36 @@ bool parse_json_reports( sim_t* sim, util::string_view /* option_name */, util::
 bool replace_json2( sim_t* sim, util::string_view /*option_name*/, util::string_view value )
 {
   // Redirect existing json2=value option to json=value,version=2
-  return parse_json_reports(sim, "json", fmt::format("{},version=2", value));
+  return parse_json_reports( sim, "json", fmt::format( "{},version=2", value ) );
 }
 
 // parse_ptr ================================================================
 
-bool parse_ptr( sim_t*             sim,
-                       util::string_view name,
-                       util::string_view value )
+bool parse_ptr( sim_t* sim, util::string_view name, util::string_view value )
 {
-  if ( name != "ptr" ) return false;
+  if ( name != "ptr" )
+    return false;
 
   if ( SC_USE_PTR )
-    sim -> dbc->ptr = util::to_int( value ) != 0;
+    sim->dbc->ptr = util::to_int( value ) != 0;
   else
-    sim -> error( "SimulationCraft has not been built with PTR data.  The 'ptr=' option is ignored.\n" );
+    sim->error( "SimulationCraft has not been built with PTR data.  The 'ptr=' option is ignored.\n" );
 
   return true;
 }
 
 // parse_active =============================================================
 
-bool parse_active( sim_t*             sim,
-                          util::string_view name,
-                          util::string_view value )
+bool parse_active( sim_t* sim, util::string_view name, util::string_view value )
 {
-  if ( name != "active" ) return false;
+  if ( name != "active" )
+    return false;
 
   if ( value == "owner" )
   {
-    if ( sim -> active_player -> is_pet() )
+    if ( sim->active_player->is_pet() )
     {
-      sim -> active_player = sim -> active_player -> cast_pet() -> owner;
+      sim->active_player = sim->active_player->cast_pet()->owner;
     }
     else
     {
@@ -261,17 +261,17 @@ bool parse_active( sim_t*             sim,
   }
   else if ( value == "none" || value == "0" )
   {
-    sim -> active_player = nullptr;
+    sim->active_player = nullptr;
   }
   else
   {
-    if ( sim -> active_player )
+    if ( sim->active_player )
     {
-      sim -> active_player = sim -> active_player -> find_pet( value );
+      sim->active_player = sim->active_player->find_pet( value );
     }
-    if ( ! sim -> active_player )
+    if ( !sim->active_player )
     {
-      sim -> active_player = sim -> find_player( value );
+      sim->active_player = sim->find_player( value );
     }
     if ( !sim->active_player )
     {
@@ -284,27 +284,24 @@ bool parse_active( sim_t*             sim,
 
 // parse_optimal_raid =======================================================
 
-bool parse_optimal_raid( sim_t*             sim,
-                                util::string_view name,
-                                util::string_view value )
+bool parse_optimal_raid( sim_t* sim, util::string_view name, util::string_view value )
 {
-  if ( name != "optimal_raid" ) return false;
+  if ( name != "optimal_raid" )
+    return false;
 
-  sim -> use_optimal_buffs_and_debuffs( util::to_int( value ) );
+  sim->use_optimal_buffs_and_debuffs( util::to_int( value ) );
 
   return true;
 }
 
 // parse_player =============================================================
 
-bool parse_player( sim_t*             sim,
-                          util::string_view name,
-                          util::string_view value )
+bool parse_player( sim_t* sim, util::string_view name, util::string_view value )
 {
   if ( name == "pet" || name == "guardian" )
   {
     std::string::size_type cut_pt = value.find( ',' );
-    auto pet_type = value.substr( 0, cut_pt );
+    auto pet_type                 = value.substr( 0, cut_pt );
 
     std::string pet_name;
     if ( cut_pt != value.npos )
@@ -317,12 +314,12 @@ bool parse_player( sim_t*             sim,
       throw std::invalid_argument( fmt::format( "Pet '{}' needs a player preceding it.", value ) );
     }
 
-    sim -> active_player = sim -> active_player -> create_pet( pet_name, pet_type );
+    sim->active_player = sim->active_player->create_pet( pet_name, pet_type );
   }
   else if ( name == "copy" )
   {
     std::string::size_type cut_pt = value.find( ',' );
-    auto player_name = value.substr( 0, cut_pt );
+    auto player_name              = value.substr( 0, cut_pt );
 
     player_t* source;
     if ( cut_pt == value.npos )
@@ -336,24 +333,24 @@ bool parse_player( sim_t*             sim,
     else
     {
       auto source_name = value.substr( cut_pt + 1 );
-      source = sim->find_player( source_name );
+      source           = sim->find_player( source_name );
       if ( !source )
       {
         throw std::invalid_argument( fmt::format(
-          "Player '{}' not found as source for profile copy, format is 'copy=target[,source]'.", source_name ) );
+            "Player '{}' not found as source for profile copy, format is 'copy=target[,source]'.", source_name ) );
       }
     }
 
-    assert(source);
+    assert( source );
 
-    sim -> active_player = module_t::get( source -> type ) -> create_player( sim, player_name );
+    sim->active_player = module_t::get( source->type )->create_player( sim, player_name );
 
-    if ( sim -> active_player != nullptr )
-      sim -> active_player -> copy_from ( source );
+    if ( sim->active_player != nullptr )
+      sim->active_player->copy_from( source );
   }
   else
   {
-    sim -> active_player = nullptr;
+    sim->active_player = nullptr;
 
     auto player_type = util::parse_player_type( name );
     if ( player_type == PLAYER_NONE )
@@ -378,10 +375,10 @@ bool parse_player( sim_t*             sim,
   }
 
   // Create options for player
-  if ( sim -> active_player )
-    sim -> active_player -> create_options();
+  if ( sim->active_player )
+    sim->active_player->create_options();
 
-  return sim -> active_player != nullptr;
+  return sim->active_player != nullptr;
 }
 
 // parse_proxy ==============================================================
@@ -412,26 +409,32 @@ bool parse_proxy( sim_t*, std::string_view, std::string_view value )
 
 // parse_cache ==============================================================
 
-bool parse_cache( sim_t*             /* sim */,
-                         util::string_view name,
-                         util::string_view value )
+bool parse_cache( sim_t* /* sim */, util::string_view name, util::string_view value )
 {
   if ( name == "cache_players" )
   {
-    if ( value == "1" ) cache::players( cache::ANY );
-    else if ( value == "0" ) cache::players( cache::CURRENT );
-    else if ( util::str_compare_ci( value, "only" ) ) cache::players( cache::ONLY );
-    else return false;
+    if ( value == "1" )
+      cache::players( cache::ANY );
+    else if ( value == "0" )
+      cache::players( cache::CURRENT );
+    else if ( util::str_compare_ci( value, "only" ) )
+      cache::players( cache::ONLY );
+    else
+      return false;
 
     return true;
   }
 
   else if ( name == "cache_items" )
   {
-    if ( value == "1" ) cache::items( cache::ANY );
-    else if ( value == "0" ) cache::items( cache::CURRENT );
-    else if ( util::str_compare_ci( value, "only" ) ) cache::items( cache::ONLY );
-    else return false;
+    if ( value == "1" )
+      cache::items( cache::ANY );
+    else if ( value == "0" )
+      cache::items( cache::CURRENT );
+    else if ( util::str_compare_ci( value, "only" ) )
+      cache::items( cache::ONLY );
+    else
+      return false;
 
     return true;
   }
@@ -447,7 +450,7 @@ class names_and_options_t
 private:
   static bool is_valid_region( const std::string& s )
   {
-    static constexpr std::array<util::string_view, 5> REGIONS { { "us", "eu", "kr", "tw", "cn" } };
+    static constexpr std::array<util::string_view, 5> REGIONS{ { "us", "eu", "kr", "tw", "cn" } };
     return s.size() == 2 && range::find( REGIONS, s ) != REGIONS.end();
   }
 
@@ -457,14 +460,14 @@ public:
   std::string server;
   cache::behavior_e cache;
 
-  names_and_options_t( sim_t* sim, util::string_view context,
-                       std::vector<std::unique_ptr<option_t>> client_options, util::string_view input )
+  names_and_options_t( sim_t* sim, util::string_view context, std::vector<std::unique_ptr<option_t>> client_options,
+                       util::string_view input )
   {
     int use_cache = 0;
 
     std::vector<std::unique_ptr<option_t>> options;
-    options = std::move(client_options);
-    //options.insert( options.begin(), client_options.begin(), client_options.end() );
+    options = std::move( client_options );
+    // options.insert( options.begin(), client_options.begin(), client_options.end() );
     options.push_back( opt_string( "region", region ) );
     options.push_back( opt_string( "server", server ) );
     options.push_back( opt_bool( "cache", use_cache ) );
@@ -472,7 +475,7 @@ public:
     names = util::string_split( input, "," );
 
     std::vector<std::string> names2 = names;
-    size_t count = 0;
+    size_t count                    = 0;
     for ( const auto& name : names )
     {
       if ( name.find( '=' ) != std::string::npos )
@@ -500,13 +503,13 @@ public:
       }
       else
       {
-        region = sim -> default_region_str;
+        region = sim->default_region_str;
       }
     }
     if ( !is_valid_region( region ) )
     {
       throw std::invalid_argument(
-        fmt::format( "Invalid region '{}', available regions: us, eu, kr, tw, cn", region ) );
+          fmt::format( "Invalid region '{}', available regions: us, eu, kr, tw, cn", region ) );
     }
 
     if ( server.empty() )
@@ -518,7 +521,7 @@ public:
       }
       else
       {
-        server = sim -> default_server_str;
+        server = sim->default_server_str;
       }
     }
 
@@ -526,12 +529,11 @@ public:
   }
 };
 
-bool clear_http_cache(sim_t* sim,
-  util::string_view name,
-  util::string_view value)
+bool clear_http_cache( sim_t* sim, util::string_view name, util::string_view value )
 {
-  assert(name == "http_clear_cache"); (void)name;
-  if (value != "0" && !sim->parent)
+  assert( name == "http_clear_cache" );
+  (void)name;
+  if ( value != "0" && !sim->parent )
   {
     http::clear_cache();
   }
@@ -551,7 +553,7 @@ bool parse_armory( sim_t* sim, std::string_view name, std::string_view value )
   {
     // Format: name[|spec]
     std::string& player_name = stuff.names[ i ];
-    std::string description = spec;
+    std::string description  = spec;
 
     std::string::size_type pos = player_name.find( '|' );
     if ( pos != player_name.npos )
@@ -639,9 +641,7 @@ bool parse_guild( sim_t* sim, std::string_view name, std::string_view value )
 
 // parse_fight_style ========================================================
 
-bool parse_fight_style( sim_t*             sim,
-                        util::string_view /*name*/,
-                        util::string_view value )
+bool parse_fight_style( sim_t* sim, util::string_view /*name*/, util::string_view value )
 {
   sim->fight_style = util::parse_fight_style( value );
 
@@ -662,19 +662,15 @@ bool parse_fight_style( sim_t*             sim,
 
 // parse_override_spell_data ================================================
 
-bool parse_override_spell_data( sim_t*             sim,
-                                util::string_view /* name */,
-                                util::string_view value )
+bool parse_override_spell_data( sim_t* sim, util::string_view /* name */, util::string_view value )
 {
-  sim->dbc_override->parse( *(sim->dbc), value );
+  sim->dbc_override->parse( *( sim->dbc ), value );
   return true;
 }
 
 // parse_override_target_health =============================================
 
-bool parse_override_target_health( sim_t*             sim,
-                                   util::string_view /* name */,
-                                   util::string_view value )
+bool parse_override_target_health( sim_t* sim, util::string_view /* name */, util::string_view value )
 {
   auto healths = util::string_split<util::string_view>( value, "/" );
 
@@ -686,34 +682,31 @@ bool parse_override_target_health( sim_t*             sim,
     s >> health_number;
     if ( health_number > 0 )
     {
-      sim -> overrides.target_health.push_back( health_number );
+      sim->overrides.target_health.push_back( health_number );
     }
   }
 
   return true;
 }
 
-
 // parse_spell_query ========================================================
 
-bool parse_spell_query( sim_t*             sim,
-                               util::string_view /* name */,
-                               util::string_view value )
+bool parse_spell_query( sim_t* sim, util::string_view /* name */, util::string_view value )
 {
-  auto sq_str = value;
+  auto sq_str       = value;
   size_t lvl_offset = util::string_view::npos;
 
   if ( ( lvl_offset = value.rfind( "@" ) ) != util::string_view::npos )
   {
     auto lvl_offset_str = value.substr( lvl_offset + 1 );
-    int sq_lvl = util::to_int( lvl_offset_str );
+    int sq_lvl          = util::to_int( lvl_offset_str );
     if ( sq_lvl < 1 )
       return false;
 
     if ( sq_lvl > MAX_ILEVEL )
     {
       throw std::invalid_argument(
-        fmt::format( "Maximum item level supported in Simulationcraft is {}.", MAX_ILEVEL ) );
+          fmt::format( "Maximum item level supported in Simulationcraft is {}.", MAX_ILEVEL ) );
     }
 
     sim->spell_query_level = as<unsigned>( sq_lvl );
@@ -734,19 +727,20 @@ bool parse_spell_query( sim_t*             sim,
 
 // Specifies both the default search order for the various data sources
 // and the complete set of valid data source names.
-const char* const default_item_db_sources[] =
-{
-  "local", "bcpapi", "wowhead", "ptrhead", "ptr2head"
+const char* const default_item_db_sources[] = { "local",
+                                                "bcpapi",
+                                                "wowhead",
+                                                "ptrhead",
+                                                "ptr2head"
 #if SC_BETA
-  , SC_BETA_STR "head"
+                                                ,
+                                                SC_BETA_STR "head"
 #endif
 };
 
-bool parse_item_sources( sim_t*             sim,
-                                util::string_view /* name */,
-                                util::string_view value )
+bool parse_item_sources( sim_t* sim, util::string_view /* name */, util::string_view value )
 {
-  sim -> item_db_sources.clear();
+  sim->item_db_sources.clear();
 
   auto sources = util::string_split<util::string_view>( value, ":/|" );
 
@@ -756,7 +750,7 @@ bool parse_item_sources( sim_t*             sim,
     {
       if ( util::str_compare_ci( source, default_item_db_source ) )
       {
-        sim -> item_db_sources.emplace_back(default_item_db_source );
+        sim->item_db_sources.emplace_back( default_item_db_source );
         break;
       }
     }
@@ -764,16 +758,14 @@ bool parse_item_sources( sim_t*             sim,
 
   if ( sim->item_db_sources.empty() )
   {
-    throw std::invalid_argument(
-      fmt::format( "Invalid global data source, valid sources are: {}.", fmt::join( default_item_db_sources, ", " ) ) );
+    throw std::invalid_argument( fmt::format( "Invalid global data source, valid sources are: {}.",
+                                              fmt::join( default_item_db_sources, ", " ) ) );
   }
 
   return true;
 }
 
-bool parse_process_priority( sim_t*             sim,
-                                   util::string_view /* name */,
-                                   util::string_view value )
+bool parse_process_priority( sim_t* sim, util::string_view /* name */, util::string_view value )
 {
   computer_process::priority_e pr = computer_process::BELOW_NORMAL;
 
@@ -799,19 +791,17 @@ bool parse_process_priority( sim_t*             sim,
   }
   else
   {
-    sim -> error( "Could not set thread priority to {}. Defaulting to below_normal priority.", value );
+    sim->error( "Could not set thread priority to {}. Defaulting to below_normal priority.", value );
   }
 
-  sim -> process_priority = pr;
+  sim->process_priority = pr;
 
   return true;
 }
 
-bool parse_target_error_role( sim_t * sim,
-                              util::string_view /* name */,
-                              util::string_view value )
+bool parse_target_error_role( sim_t* sim, util::string_view /* name */, util::string_view value )
 {
-  sim -> target_error_role = util::parse_role_type( value );
+  sim->target_error_role = util::parse_role_type( value );
 
   if ( sim->target_error_role == ROLE_NONE )
   {
@@ -821,9 +811,7 @@ bool parse_target_error_role( sim_t * sim,
   return true;
 }
 
-bool parse_maximize_reporting( sim_t*             sim,
-                                   util::string_view /*name*/,
-                                   util::string_view v )
+bool parse_maximize_reporting( sim_t* sim, util::string_view /*name*/, util::string_view v )
 {
   if ( v != "0" && v != "1" )
   {
@@ -832,16 +820,16 @@ bool parse_maximize_reporting( sim_t*             sim,
   bool r = util::to_int( v ) != 0;
   if ( r )
   {
-    sim -> maximize_reporting = true;
-    sim -> statistics_level = 100;
-    sim -> report_raid_summary = true;
-    sim -> report_rng = true;
-    sim -> report_details = true;
-    sim -> report_targets = true;
-    sim -> report_pets_separately = true;
-    sim -> report_precision = 4;
-    sim -> buff_uptime_timeline = true;
-    sim -> buff_stack_uptime_timeline = true;
+    sim->maximize_reporting         = true;
+    sim->statistics_level           = 100;
+    sim->report_raid_summary        = true;
+    sim->report_rng                 = true;
+    sim->report_details             = true;
+    sim->report_targets             = true;
+    sim->report_pets_separately     = true;
+    sim->report_precision           = 4;
+    sim->buff_uptime_timeline       = true;
+    sim->buff_stack_uptime_timeline = true;
   }
 
   return true;
@@ -857,7 +845,7 @@ bool parse_report_merged_stats( sim_t* sim, std::string_view, std::string_view v
     if ( !range::contains( valid_stats, str ) )
     {
       throw std::invalid_argument(
-        fmt::format( "Invalid report_merged_stats '{}', valid stats are: {}.", str, fmt::join( valid_stats, "," ) ) );
+          fmt::format( "Invalid report_merged_stats '{}', valid stats are: {}.", str, fmt::join( valid_stats, "," ) ) );
     }
   }
 
@@ -875,7 +863,7 @@ void adjust_threads( int& threads )
 {
   // This is to resolve https://github.com/simulationcraft/simc/issues/2304
   int max_threads = sc_thread_t::cpu_thread_count();
-  if ( threads <= 0 && max_threads > 0 ) //max_threads will return 0 if it has no clue how many threads it can use.
+  if ( threads <= 0 && max_threads > 0 )  // max_threads will return 0 if it has no clue how many threads it can use.
   {
     threads *= -1;
     if ( threads <= max_threads )
@@ -893,15 +881,16 @@ struct proxy_cast_check_t : public event_t
   timespan_t cooldown;
   timespan_t duration;
 
-  proxy_cast_check_t( sim_t& s, int u, timespan_t st, timespan_t i, timespan_t cd, timespan_t d, const int& o ) :
-    event_t( s, i ),
-    uses( u ), _override( o ), start_time( st ), cooldown( cd ), duration( d )
+  proxy_cast_check_t( sim_t& s, int u, timespan_t st, timespan_t i, timespan_t cd, timespan_t d, const int& o )
+    : event_t( s, i ), uses( u ), _override( o ), start_time( st ), cooldown( cd ), duration( d )
   {
   }
   const char* name() const override
-  { return "proxy_cast_check"; }
-  virtual bool proxy_check() = 0;
-  virtual void proxy_execute() = 0;
+  {
+    return "proxy_cast_check";
+  }
+  virtual bool proxy_check()                                        = 0;
+  virtual void proxy_execute()                                      = 0;
   virtual proxy_cast_check_t* proxy_schedule( timespan_t interval ) = 0;
 
   void execute() override
@@ -917,7 +906,7 @@ struct proxy_cast_check_t : public event_t
       if ( uses == _override && start_time > timespan_t::zero() && ( sim().current_time() - start_time ) >= cooldown )
       {
         start_time = timespan_t::zero();
-        uses = 0;
+        uses       = 0;
       }
 
       if ( uses < _override )
@@ -932,9 +921,8 @@ struct proxy_cast_check_t : public event_t
         interval = duration + timespan_t::from_seconds( 1 );
 
         if ( sim().debug )
-          sim().out_debug.printf( "Proxy-Execute uses=%d total=%d start_time=%.3f next_check=%.3f",
-                      uses, _override, start_time.total_seconds(),
-                      ( sim().current_time() + interval ).total_seconds() );
+          sim().out_debug.printf( "Proxy-Execute uses=%d total=%d start_time=%.3f next_check=%.3f", uses, _override,
+                                  start_time.total_seconds(), ( sim().current_time() + interval ).total_seconds() );
       }
     }
 
@@ -944,12 +932,13 @@ struct proxy_cast_check_t : public event_t
 
 struct sim_end_event_t : event_t
 {
-  sim_end_event_t( sim_t& s, timespan_t end_time ) :
-    event_t( s, end_time )
+  sim_end_event_t( sim_t& s, timespan_t end_time ) : event_t( s, end_time )
   {
   }
   const char* name() const override
-  { return "sim_end_expected_time"; }
+  {
+    return "sim_end_expected_time";
+  }
   void execute() override
   {
     sim().cancel_iteration();
@@ -963,19 +952,21 @@ struct sim_safeguard_end_event_t : public sim_end_event_t
 {
   timespan_t et;
 
-  sim_safeguard_end_event_t( sim_t& s, timespan_t end_time ) :
-    sim_end_event_t( s, end_time ), et( end_time )
-  { }
+  sim_safeguard_end_event_t( sim_t& s, timespan_t end_time ) : sim_end_event_t( s, end_time ), et( end_time )
+  {
+  }
 
   const char* name() const override
-  { return "sim_end_twice_expected_time"; }
+  {
+    return "sim_end_twice_expected_time";
+  }
 
   void execute() override
   {
-    sim().errorf( "Simulation has been forcefully cancelled at %.3f (%.3f) because twice the "
-                  "expected combat length has been exceeded.",
-                  sim().current_time().total_seconds(),
-                  et.total_seconds() );
+    sim().errorf(
+        "Simulation has been forcefully cancelled at %.3f (%.3f) because twice the "
+        "expected combat length has been exceeded.",
+        sim().current_time().total_seconds(), et.total_seconds() );
 
     sim_end_event_t::execute();
   }
@@ -983,37 +974,39 @@ struct sim_safeguard_end_event_t : public sim_end_event_t
 
 struct resource_timeline_collect_event_t : public event_t
 {
-  resource_timeline_collect_event_t( sim_t& s ) :
-    event_t( s, timespan_t::from_seconds( 1 ) )
+  resource_timeline_collect_event_t( sim_t& s ) : event_t( s, timespan_t::from_seconds( 1 ) )
   {
   }
   const char* name() const override
-  { return "resource_timeline_collect_event_t"; }
+  {
+    return "resource_timeline_collect_event_t";
+  }
   void execute() override
   {
     if ( sim().iterations == 1 || sim().current_iteration > 0 )
     {
-      if ( ! sim().single_actor_batch )
+      if ( !sim().single_actor_batch )
       {
         // Assumptions: Enemies do not have primary resource regeneration
         for ( auto* p : sim().player_non_sleeping_list )
         {
-           if ( p -> primary_resource() == RESOURCE_NONE ) continue;
+          if ( p->primary_resource() == RESOURCE_NONE )
+            continue;
 
-          p -> collect_resource_timeline_information();
+          p->collect_resource_timeline_information();
         }
       }
       else
       {
         auto p = sim().player_no_pet_list[ sim().current_index ];
-        if (p && p -> primary_resource() != RESOURCE_NONE)
+        if ( p && p->primary_resource() != RESOURCE_NONE )
         {
-          p -> collect_resource_timeline_information();
-          for ( auto pet : p -> pet_list )
+          p->collect_resource_timeline_information();
+          for ( auto pet : p->pet_list )
           {
-            if ( pet -> primary_resource() != RESOURCE_NONE )
+            if ( pet->primary_resource() != RESOURCE_NONE )
             {
-              pet -> collect_resource_timeline_information();
+              pet->collect_resource_timeline_information();
             }
           }
         }
@@ -1022,7 +1015,7 @@ struct resource_timeline_collect_event_t : public event_t
       // However, enemies do have health
       for ( auto* p : sim().target_non_sleeping_list )
       {
-         p -> collect_resource_timeline_information();
+        p->collect_resource_timeline_information();
       }
     }
 
@@ -1032,8 +1025,7 @@ struct resource_timeline_collect_event_t : public event_t
 
 struct regen_event_t : public event_t
 {
-  regen_event_t( sim_t& s ) :
-    event_t( s, s.regen_periodicity )
+  regen_event_t( sim_t& s ) : event_t( s, s.regen_periodicity )
   {
     if ( sim().debug )
     {
@@ -1042,33 +1034,37 @@ struct regen_event_t : public event_t
   }
 
   const char* name() const override
-  { return "Regen Event"; }
+  {
+    return "Regen Event";
+  }
 
   void execute() override
   {
-    if ( ! sim().single_actor_batch )
+    if ( !sim().single_actor_batch )
     {
       // targets do not get any resource regen for performance reasons
       for ( auto* p : sim().player_non_sleeping_list )
       {
-         if ( p -> primary_resource() == RESOURCE_NONE ) continue;
-        if ( p ->resource_regeneration !=  regen_type::STATIC ) continue;
+        if ( p->primary_resource() == RESOURCE_NONE )
+          continue;
+        if ( p->resource_regeneration != regen_type::STATIC )
+          continue;
 
-        p -> regen( sim().regen_periodicity );
+        p->regen( sim().regen_periodicity );
       }
     }
     else
     {
       auto p = sim().player_no_pet_list[ sim().current_index ];
-      if ( p && p -> primary_resource() != RESOURCE_NONE && p ->resource_regeneration ==  regen_type::STATIC )
+      if ( p && p->primary_resource() != RESOURCE_NONE && p->resource_regeneration == regen_type::STATIC )
       {
-        p -> regen( sim().regen_periodicity );
-        for ( auto pet : p -> pet_list )
+        p->regen( sim().regen_periodicity );
+        for ( auto pet : p->pet_list )
         {
-          if ( ! pet -> is_sleeping() && p -> primary_resource() != RESOURCE_NONE &&
-            p ->resource_regeneration ==  regen_type::STATIC )
+          if ( !pet->is_sleeping() && p->primary_resource() != RESOURCE_NONE &&
+               p->resource_regeneration == regen_type::STATIC )
           {
-            pet -> regen( sim().regen_periodicity );
+            pet->regen( sim().regen_periodicity );
           }
         }
       }
@@ -1082,12 +1078,12 @@ struct regen_event_t : public event_t
 std::vector<std::string> get_api_key_locations()
 {
   std::vector<std::string> key_locations;
-  key_locations.emplace_back("./apikey.txt" );
+  key_locations.emplace_back( "./apikey.txt" );
 
   // unix home
   if ( char* home_path = getenv( "HOME" ) )
   {
-    std::string home_apikey(home_path);
+    std::string home_apikey( home_path );
     home_apikey += "/.simc_apikey";
     key_locations.push_back( home_apikey );
   }
@@ -1097,7 +1093,7 @@ std::vector<std::string> get_api_key_locations()
   {
     if ( char* home_path = getenv( "HOMEPATH" ) )
     {
-      std::string home_apikey(home_drive);
+      std::string home_apikey( home_drive );
       home_apikey += home_path;
       home_apikey += "/apikey.txt";
       key_locations.push_back( home_apikey );
@@ -1107,7 +1103,6 @@ std::vector<std::string> get_api_key_locations()
   return key_locations;
 }
 
-
 /**
  * @brief Try to get user-supplied api key
  *
@@ -1115,8 +1110,8 @@ std::vector<std::string> get_api_key_locations()
  * This will be done at the time of compilation, as we do not want to post our key on git for everyone to see.
  * However, the default setting will always check to see if the user has put their own 32-character key in.
  * If this is true, then the apikey that they enter will overwrite the default.
- * in predetermined locations to see if they have saved the key to a file named 'api_key.txt'. The gui has a entry field setup
- * That will update the apikey variable whenever the user enters a key there.
+ * in predetermined locations to see if they have saved the key to a file named 'api_key.txt'. The gui has a entry field
+ * setup That will update the apikey variable whenever the user enters a key there.
  */
 std::string get_api_key()
 {
@@ -1129,13 +1124,13 @@ std::string get_api_key()
   for ( const auto& filename : key_locations )
   {
     std::ifstream myfile( filename );
-    if ( ! myfile.is_open() )
+    if ( !myfile.is_open() )
     {
       continue;
     }
 
     std::string line;
-    std::getline( myfile,line );
+    std::getline( myfile, line );
     if ( bcp_api::validate_api_key( line ) )
     {
       return line;
@@ -1148,7 +1143,7 @@ std::string get_api_key()
   }
 
 #if defined( SC_DEFAULT_APIKEY )
-  return std::string(SC_DEFAULT_APIKEY);
+  return std::string( SC_DEFAULT_APIKEY );
 #endif /* SC_DEFAULT_APIKEY */
   return {};
 }
@@ -1158,7 +1153,8 @@ struct bloodlust_check_t : public event_t
 {
   bloodlust_check_t( sim_t& sim, timespan_t time_until_next_check = timespan_t::from_seconds( 1.0 ) )
     : event_t( sim, time_until_next_check )
-  {}
+  {
+  }
 
   const char* name() const override
   {
@@ -1167,7 +1163,7 @@ struct bloodlust_check_t : public event_t
 
   void execute() override
   {
-    sim_t& sim = this->sim();
+    sim_t& sim  = this->sim();
     player_t* t = sim.target;
     if ( ( sim.bloodlust_percent > 0 && t->health_percentage() < sim.bloodlust_percent ) ||
          ( sim.bloodlust_time < timespan_t::zero() && t->time_to_percent( 0.0 ) < -sim.bloodlust_time ) ||
@@ -1205,7 +1201,9 @@ struct bloodlust_check_t : public event_t
 
 struct heartbeat_event_t : public event_t
 {
-  heartbeat_event_t( sim_t& s, timespan_t t ) : event_t( s, t ) {}
+  heartbeat_event_t( sim_t& s, timespan_t t ) : event_t( s, t )
+  {
+  }
 
   const char* name() const override
   {
@@ -1264,13 +1262,13 @@ struct compare_apm
 {
   bool operator()( player_t* l, player_t* r ) const
   {
-    double lv = l->collected_data.fight_length.mean()
-      ? 60.0 * l->collected_data.executed_foreground_actions.mean() / l->collected_data.fight_length.mean()
-      : 0.0;
+    double lv = l->collected_data.fight_length.mean() ? 60.0 * l->collected_data.executed_foreground_actions.mean() /
+                                                            l->collected_data.fight_length.mean()
+                                                      : 0.0;
 
-    double rv = r->collected_data.fight_length.mean()
-      ? 60.0 * r->collected_data.executed_foreground_actions.mean() / r->collected_data.fight_length.mean()
-      : 0.0;
+    double rv = r->collected_data.fight_length.mean() ? 60.0 * r->collected_data.executed_foreground_actions.mean() /
+                                                            r->collected_data.fight_length.mean()
+                                                      : 0.0;
 
     if ( lv == rv )
     {
@@ -1338,25 +1336,25 @@ struct compare_name
 {
   bool operator()( player_t* l, player_t* r ) const
   {
-    if ( l -> type != r -> type )
+    if ( l->type != r->type )
     {
-      return l -> type < r -> type;
+      return l->type < r->type;
     }
-    if ( l -> specialization() != r -> specialization() )
+    if ( l->specialization() != r->specialization() )
     {
-      return l -> specialization() < r -> specialization();
+      return l->specialization() < r->specialization();
     }
-    return l -> name_str < r -> name_str;
+    return l->name_str < r->name_str;
   }
 };
 
-} // UNNAMED NAMESPACE ===================================================
+}  // namespace
 
 // Standard progress method, normal mode sims use the single (first) index, single actor batch
 // sims progress with the main thread's current index.
 sim_progress_t work_queue_t::progress( int idx )
 {
-  G l(m);
+  G l( m );
   size_t current_index = idx;
   if ( idx < 0 )
   {
@@ -1546,6 +1544,9 @@ sim_t::sim_t()
     count_overheal_as_heal( false ),
     scaling_normalized( 1.0 ),
     merge_enemy_priority_dmg( false ),
+    rl_enable( true ),
+    rl_trace( true ),
+    rl_trace_file( "rl_trace.jsonl" ),
     // Multi-Threading
     threads( 0 ),
     thread_index( 0 ),
@@ -1575,7 +1576,7 @@ sim_t::sim_t()
 {
   item_db_sources.assign( std::begin( default_item_db_sources ), std::end( default_item_db_sources ) );
 
-  max_time = 300_s;
+  max_time           = 300_s;
   vary_combat_length = 0.2;
   use_optimal_buffs_and_debuffs( 1 );
 
@@ -1588,63 +1589,63 @@ sim_t::sim_t( sim_t* p, int index ) : sim_t()
 {
   assert( p );
 
-  parent = p;
+  parent       = p;
   thread_index = index;
 
   // Inherit setup
-  setup( parent -> control );
+  setup( parent->control );
 
   // Inherit 'scaling' settings from parent because these are set outside of the config file
-  assert( parent -> scaling );
-  scaling -> scale_stat  = parent -> scaling -> scale_stat;
-  scaling -> scale_value = parent -> scaling -> scale_value;
+  assert( parent->scaling );
+  scaling->scale_stat  = parent->scaling->scale_stat;
+  scaling->scale_value = parent->scaling->scale_value;
 
   // Inherit reporting directives from parent
-  report_progress = parent -> report_progress;
+  report_progress = parent->report_progress;
 
   // Inherit 'plot' settings from parent because are set outside of the config file
-  enchant = parent -> enchant;
+  enchant = parent->enchant;
 
   // While we inherit the parent seed, it may get overwritten in sim_t::init
-  seed = parent -> seed;
+  seed = parent->seed;
 
-  parent -> add_relative( this );
+  parent->add_relative( this );
 }
 
 sim_t::sim_t( sim_t* p, int index, sim_control_t* control ) : sim_t()
 {
   assert( p && control );
 
-  parent = p;
+  parent       = p;
   thread_index = index;
 
   // Use specialized control for setup
   setup( control );
 
   // Inherit 'scaling' settings from parent because these are set outside of the config file
-  assert( parent -> scaling );
-  scaling -> scale_stat  = parent -> scaling -> scale_stat;
-  scaling -> scale_value = parent -> scaling -> scale_value;
+  assert( parent->scaling );
+  scaling->scale_stat  = parent->scaling->scale_stat;
+  scaling->scale_value = parent->scaling->scale_value;
 
   // Inherit reporting directives from parent
-  report_progress = parent -> report_progress;
+  report_progress = parent->report_progress;
 
   // Inherit 'plot' settings from parent because are set outside of the config file
-  enchant = parent -> enchant;
+  enchant = parent->enchant;
 
   // While we inherit the parent seed, it may get overwritten in sim_t::init
-  seed = parent -> seed;
+  seed = parent->seed;
 
-  parent -> add_relative( this );
+  parent->add_relative( this );
 }
 
 // sim_t::~sim_t ============================================================
 
 sim_t::~sim_t()
 {
-  assert( ( requires_cleanup() && relatives.empty() ) || ! requires_cleanup() );
-  if( parent )
-    parent -> remove_relative( this );
+  assert( ( requires_cleanup() && relatives.empty() ) || !requires_cleanup() );
+  if ( parent )
+    parent->remove_relative( this );
 }
 
 // sim_t::iteration_time_adjust =============================================
@@ -1668,7 +1669,7 @@ double sim_t::iteration_time_adjust()
   }
   else
   {
-    auto progress = work_queue -> progress();
+    auto progress = work_queue->progress();
     return 1.0 + vary_combat_length * ( ( current_iteration % 2 ) ? 1 : -1 ) * progress.pct();
   }
 }
@@ -1684,9 +1685,9 @@ double sim_t::expected_max_time() const
 
 void sim_t::add_relative( sim_t* cousin )
 {
-  if( parent )
+  if ( parent )
   {
-    parent -> add_relative( cousin );
+    parent->add_relative( cousin );
   }
   else
   {
@@ -1699,9 +1700,9 @@ void sim_t::add_relative( sim_t* cousin )
 
 void sim_t::remove_relative( sim_t* cousin )
 {
-  if( parent )
+  if ( parent )
   {
-    parent -> remove_relative( cousin );
+    parent->remove_relative( cousin );
   }
   else
   {
@@ -1743,11 +1744,11 @@ void sim_t::cancel()
 
 void sim_t::interrupt()
 {
-  work_queue -> flush();
+  work_queue->flush();
 
-  for (auto & child : children)
+  for ( auto& child : children )
   {
-    child -> interrupt();
+    child->interrupt();
   }
 }
 
@@ -1836,12 +1837,12 @@ void sim_t::combat_begin()
   if ( debug_each )
   {
     // On Debug Each, we collect debug information for each iteration, but clear it before each one
-    std::shared_ptr<io::ofstream> o(new io::ofstream());
-    o -> open( output_file_str );
-    if ( o -> is_open() )
+    std::shared_ptr<io::ofstream> o( new io::ofstream() );
+    o->open( output_file_str );
+    if ( o->is_open() )
     {
       out_debug = o;
-      out_log = o;
+      out_log   = o;
 
       fmt::print( "------ Iteration #{} ------", current_iteration + 1 );
       std::fflush( stdout );
@@ -1893,34 +1894,35 @@ void sim_t::combat_begin()
   for ( player_e i = PLAYER_NONE; i < PLAYER_MAX; ++i )
   {
     const module_t* m = module_t::get( i );
-    if ( m ) m -> combat_begin( this );
+    if ( m )
+      m->combat_begin( this );
   }
 
   if ( single_actor_batch )
   {
-    player_no_pet_list[ current_index ] -> precombat_init();
-    player_no_pet_list[ current_index ] -> combat_begin();
-    for ( auto pet: player_no_pet_list[ current_index ] -> pet_list )
+    player_no_pet_list[ current_index ]->precombat_init();
+    player_no_pet_list[ current_index ]->combat_begin();
+    for ( auto pet : player_no_pet_list[ current_index ]->pet_list )
     {
       // Pets do not need to be initialised individually first
-      pet -> precombat_init();
-      pet -> combat_begin();
+      pet->precombat_init();
+      pet->combat_begin();
     }
   }
   else
   {
     // Initialize all actors before (pre)combat.
     // Needs to be a index-based loop, as the player list may be extended during iteration.
-    for ( size_t i = 0; i < player_list.size(); ++i ) // NOLINT(modernize-loop-convert)
+    for ( size_t i = 0; i < player_list.size(); ++i )  // NOLINT(modernize-loop-convert)
     {
       player_t* p = player_list[ i ];
-      p -> precombat_init();
+      p->precombat_init();
     }
 
     for ( size_t i = 0; i < player_list.size(); ++i )  // NOLINT(modernize-loop-convert)
     {
       player_t* p = player_list[ i ];
-      p -> combat_begin();
+      p->combat_begin();
     }
   }
 
@@ -1932,14 +1934,14 @@ void sim_t::combat_begin()
     make_event<bloodlust_check_t>( *this, *this, timespan_t::from_seconds( 0.0 ) );
   }
 
-  if ( fixed_time || ( target -> resources.base[ RESOURCE_HEALTH ] == 0 ) )
+  if ( fixed_time || ( target->resources.base[ RESOURCE_HEALTH ] == 0 ) )
   {
     make_event<sim_end_event_t>( *this, *this, expected_iteration_time );
-    target -> death_pct = enemy_death_pct;
+    target->death_pct = enemy_death_pct;
   }
   else
   {
-    target -> death_pct = enemy_death_pct;
+    target->death_pct = enemy_death_pct;
   }
   make_event<sim_safeguard_end_event_t>( *this, *this, expected_iteration_time + expected_iteration_time );
 
@@ -1958,41 +1960,43 @@ void sim_t::combat_end()
 
   for ( auto* t : target_list )
   {
-     if ( t -> is_add() ) continue;
-    t -> combat_end();
+    if ( t->is_add() )
+      continue;
+    t->combat_end();
   }
 
   for ( player_e i = PLAYER_NONE; i < PLAYER_MAX; ++i )
   {
     const module_t* m = module_t::get( i );
-    if ( m ) m -> combat_end( this );
+    if ( m )
+      m->combat_end( this );
   }
 
   raid_event_t::combat_end( this );
 
   if ( single_actor_batch )
   {
-    player_no_pet_list[ current_index ] -> combat_end();
+    player_no_pet_list[ current_index ]->combat_end();
   }
   else
   {
     for ( auto* p : player_no_pet_list )
     {
-       p -> combat_end();
+      p->combat_end();
     }
   }
 
   for ( size_t i = 0; i < buff_list.size(); ++i )
   {
     buff_t* b = buff_list[ i ];
-    b -> expire();
+    b->expire();
   }
 
   if ( iterations == 1 || current_iteration >= 1 )
     datacollection_end();
 
-  //assert( active_enemies == 0 );
-  //assert( active_allies == 0 );
+  // assert( active_enemies == 0 );
+  // assert( active_allies == 0 );
 
   print_debug( "Flush Events" );
 
@@ -2016,22 +2020,23 @@ void sim_t::datacollection_begin()
 
   for ( auto* t : target_list )
   {
-     if ( t -> is_add() ) continue;
-    t -> datacollection_begin();
+    if ( t->is_add() )
+      continue;
+    t->datacollection_begin();
   }
 
   for ( size_t i = 0; i < buff_list.size(); ++i )
-    buff_list[ i ] -> datacollection_begin();
+    buff_list[ i ]->datacollection_begin();
 
   if ( single_actor_batch )
   {
-    player_no_pet_list[ current_index ] -> datacollection_begin();
+    player_no_pet_list[ current_index ]->datacollection_begin();
   }
   else
   {
     for ( auto* p : player_no_pet_list )
     {
-       p -> datacollection_begin();
+      p->datacollection_begin();
     }
   }
   make_event<resource_timeline_collect_event_t>( *this, *this );
@@ -2047,26 +2052,27 @@ void sim_t::datacollection_end()
 
   for ( auto* t : target_list )
   {
-     if ( t -> is_add() ) continue;
-    t -> datacollection_end();
+    if ( t->is_add() )
+      continue;
+    t->datacollection_end();
   }
 
   if ( single_actor_batch )
   {
-    player_no_pet_list[ current_index ] -> datacollection_end();
+    player_no_pet_list[ current_index ]->datacollection_end();
   }
   else
   {
     for ( auto* p : player_no_pet_list )
     {
-       p -> datacollection_end();
+      p->datacollection_end();
     }
   }
 
   for ( size_t i = 0; i < buff_list.size(); ++i )
   {
     buff_t* b = buff_list[ i ];
-    b -> datacollection_end();
+    b->datacollection_end();
   }
 
   total_dmg.add( iteration_dmg );
@@ -2076,29 +2082,28 @@ void sim_t::datacollection_end()
   total_absorb.add( iteration_absorb );
   raid_aps.add( current_time() != timespan_t::zero() ? iteration_absorb / current_time().total_seconds() : 0 );
 
-  if ( deterministic && report_iteration_data > 0 && current_iteration > 0 &&
-       current_time() > timespan_t::zero() )
+  if ( deterministic && report_iteration_data > 0 && current_iteration > 0 && current_time() > timespan_t::zero() )
   {
     // TODO: Metric should be selectable
-    iteration_data_entry_t entry( iteration_dmg / current_time().total_seconds(),
-        current_time().total_seconds(), seed, current_iteration );
+    iteration_data_entry_t entry( iteration_dmg / current_time().total_seconds(), current_time().total_seconds(), seed,
+                                  current_iteration );
     for ( auto* t : target_list )
     {
-       // Once we start hitting adds (instead of real enemies), break out as those don't have real
+      // Once we start hitting adds (instead of real enemies), break out as those don't have real
       // hitpoints.
-      if ( t -> is_add() )
+      if ( t->is_add() )
       {
         break;
       }
 
-      entry.add_health( static_cast< uint64_t >( t -> resources.initial[ RESOURCE_HEALTH ] ) );
+      entry.add_health( static_cast<uint64_t>( t->resources.initial[ RESOURCE_HEALTH ] ) );
     }
 
-    if ( std::find_if( iteration_data.begin(), iteration_data.end(),
-                       seed_predicate_t( seed ) ) != iteration_data.end() )
+    if ( std::find_if( iteration_data.begin(), iteration_data.end(), seed_predicate_t( seed ) ) !=
+         iteration_data.end() )
     {
-      errorf( "[Thread-%d] Duplicate seed %llu found on iteration %u, skipping ...",
-          thread_index, seed, current_iteration );
+      errorf( "[Thread-%d] Duplicate seed %llu found on iteration %u, skipping ...", thread_index, seed,
+              current_iteration );
     }
     else
     {
@@ -2111,32 +2116,34 @@ void sim_t::datacollection_end()
 
 void sim_t::analyze_error()
 {
-  if ( thread_index != 0 ) return;
-  if ( target_error <= 0 ) return;
-  if ( current_iteration < 1 ) return;
+  if ( thread_index != 0 )
+    return;
+  if ( target_error <= 0 )
+    return;
+  if ( current_iteration < 1 )
+    return;
 
-  work_queue -> lock();
+  work_queue->lock();
 
   // First iterations of each thread are considered statistically insignificant and not
   // collected
-  int n_iterations = work_queue -> progress().current_iterations - threads;
+  int n_iterations = work_queue->progress().current_iterations - threads;
   if ( strict_work_queue )
   {
-    range::for_each( children, [ &n_iterations ]( sim_t* c ) {
-      n_iterations += c -> work_queue -> progress().current_iterations;
-    } );
+    range::for_each( children,
+                     [ &n_iterations ]( sim_t* c ) { n_iterations += c->work_queue->progress().current_iterations; } );
   }
 
   if ( n_iterations < analyze_error_interval * ( analyze_number + 1 ) )
   {
-    work_queue -> unlock();
+    work_queue->unlock();
     return;
   }
 
   analyze_number++;
 
-  double mean_total=0;
-  int mean_count=0;
+  double mean_total = 0;
+  int mean_count    = 0;
 
   current_error = 0;
 
@@ -2144,8 +2151,8 @@ void sim_t::analyze_error()
 
   if ( single_actor_batch )
   {
-    auto p = player_no_pet_list[ current_index ];
-    auto& cd = p -> collected_data;
+    auto p   = player_no_pet_list[ current_index ];
+    auto& cd = p->collected_data;
     AUTO_LOCK( cd.target_metric_mutex );
     if ( cd.target_metric.size() != 0 )
     {
@@ -2166,8 +2173,8 @@ void sim_t::analyze_error()
 
     for ( size_t i = 0; i < actor_list.size(); i++ )
     {
-      player_t* p = actor_list[i];
-      player_collected_data_t& cd = p -> collected_data;
+      player_t* p                 = actor_list[ i ];
+      player_collected_data_t& cd = p->collected_data;
       AUTO_LOCK( cd.target_metric_mutex );
       if ( cd.target_metric.size() != 0 )
       {
@@ -2177,14 +2184,14 @@ void sim_t::analyze_error()
         if ( mean != 0 )
         {
           if ( is_multiactor_metric )
-           {
-             double error = sim_t::distribution_mean_error( *this, cd.target_metric );
-             current_error += error;
+          {
+            double error = sim_t::distribution_mean_error( *this, cd.target_metric );
+            current_error += error;
           }
           else
           {
-             double error = sim_t::distribution_mean_error( *this, cd.target_metric ) / mean;
-             if ( error > current_error )
+            double error = sim_t::distribution_mean_error( *this, cd.target_metric ) / mean;
+            if ( error > current_error )
               current_error = error;
           }
           mean_total += mean;
@@ -2200,7 +2207,7 @@ void sim_t::analyze_error()
     {
       current_error = current_error / current_mean;
       // We're going to lie and call the sum the mean for multiactor metrics.
-      current_mean  = mean_total;
+      current_mean = mean_total;
     }
     else
     {
@@ -2218,25 +2225,24 @@ void sim_t::analyze_error()
     }
     else
     {
-      auto projected_iterations = static_cast<int>( n_iterations * ( ( current_error * current_error ) /
-          ( target_error *  target_error ) ) );
-      if ( ! strict_work_queue )
+      auto projected_iterations =
+          static_cast<int>( n_iterations * ( ( current_error * current_error ) / ( target_error * target_error ) ) );
+      if ( !strict_work_queue )
       {
-        work_queue -> project( projected_iterations );
+        work_queue->project( projected_iterations );
       }
       else
       {
         // Divide work evenly between threads
         projected_iterations /= threads;
-        work_queue -> project( projected_iterations );
-        range::for_each( children, [ projected_iterations ]( sim_t* c ) {
-          c -> work_queue -> project( projected_iterations );
-        } );
+        work_queue->project( projected_iterations );
+        range::for_each( children,
+                         [ projected_iterations ]( sim_t* c ) { c->work_queue->project( projected_iterations ); } );
       }
     }
   }
 
-  work_queue -> unlock();
+  work_queue->unlock();
 }
 
 /**
@@ -2247,20 +2253,20 @@ void sim_t::analyze_error()
  */
 void sim_t::check_actors()
 {
-  bool too_quiet = true; // Check for at least 1 active player
-  bool zero_dds = true; // Check for at least 1 player != HEAL
+  bool too_quiet = true;  // Check for at least 1 active player
+  bool zero_dds  = true;  // Check for at least 1 player != HEAL
 
   for ( const auto& p : actor_list )
   {
-    if ( p -> is_pet() || p -> is_enemy() )
+    if ( p->is_pet() || p->is_enemy() )
       continue;
-    if ( p -> type == HEALING_ENEMY )
+    if ( p->type == HEALING_ENEMY )
       continue;
-    if ( ! p -> quiet )
+    if ( !p->quiet )
     {
       too_quiet = false;
     }
-    if ( p -> primary_role() != ROLE_HEAL && ! p -> is_pet() )
+    if ( p->primary_role() != ROLE_HEAL && !p->is_pet() )
     {
       zero_dds = false;
     }
@@ -2272,7 +2278,7 @@ void sim_t::check_actors()
   }
 
   // Set Fixed_Time when there are no DD's present
-  if ( zero_dds && ! debug )
+  if ( zero_dds && !debug )
   {
     fixed_time = true;
   }
@@ -2306,41 +2312,40 @@ void sim_t::init_fight_style()
     {
       // Phase 1 - Adds and move into position to fight adds
       auto first_and_duration = std::max( static_cast<unsigned>( max_time.total_seconds() * 0.05 ), 1U );
-      auto cooldown = std::max( static_cast<unsigned>( max_time.total_seconds() * 0.075 ), 1U );
-      auto last = static_cast<unsigned>( max_time.total_seconds() * 0.75 );
+      auto cooldown           = std::max( static_cast<unsigned>( max_time.total_seconds() * 0.075 ), 1U );
+      auto last               = static_cast<unsigned>( max_time.total_seconds() * 0.75 );
 
-      raid_events_str += fmt::format( "/adds,count=5,first={},cooldown={},duration={},last={}",
-                                      first_and_duration, cooldown, first_and_duration, last );
+      raid_events_str += fmt::format( "/adds,count=5,first={},cooldown={},duration={},last={}", first_and_duration,
+                                      cooldown, first_and_duration, last );
 
-      raid_events_str += fmt::format( "/movement,distance=25,first={},cooldown={},last={}",
-                                      first_and_duration, cooldown, last );
+      raid_events_str +=
+          fmt::format( "/movement,distance=25,first={},cooldown={},last={}", first_and_duration, cooldown, last );
 
       // Phase2 - Move out of stuff
-      auto first2 = static_cast<unsigned>( max_time.total_seconds() * 0.03 );
+      auto first2    = static_cast<unsigned>( max_time.total_seconds() * 0.03 );
       auto cooldown2 = std::max( static_cast<unsigned>( max_time.total_seconds() * 0.04 ), 1U );
 
-      raid_events_str += fmt::format( "/movement,players_only=1,distance=8,first={},cooldown={}",
-                                      first2, cooldown2 );
+      raid_events_str += fmt::format( "/movement,players_only=1,distance=8,first={},cooldown={}", first2, cooldown2 );
     }
     break;
 
     case FIGHT_STYLE_DUNGEON_SLICE:
       desired_targets = 1;
-      max_time = timespan_t::from_seconds( 360.0 );
+      max_time        = timespan_t::from_seconds( 360.0 );
 
       shadowlands_opts.enable_rune_words = false;
-      ignore_invulnerable_targets = true;
+      ignore_invulnerable_targets        = true;
 
       raid_events_str +=
-        "/adds,name=Boss,count=1,cooldown=500,duration=135,type=add_boss,duration_stddev=1"
-        "/adds,name=SmallAdd,count=5,count_range=1,first=140,cooldown=45,duration=18,duration_stddev=2"
-        "/adds,name=BigAdd,count=2,count_range=1,first=160,cooldown=50,duration=30,duration_stddev=2";
+          "/adds,name=Boss,count=1,cooldown=500,duration=135,type=add_boss,duration_stddev=1"
+          "/adds,name=SmallAdd,count=5,count_range=1,first=140,cooldown=45,duration=18,duration_stddev=2"
+          "/adds,name=BigAdd,count=2,count_range=1,first=160,cooldown=50,duration=30,duration_stddev=2";
       break;
 
     case FIGHT_STYLE_DUNGEON_ROUTE:
       // To be used in conjunction with "pull" raid events for a simulated dungeon run.
       desired_targets = 1;
-      fixed_time = false;
+      fixed_time      = false;
       // Bloodlust is handled by an option on each pull raid event.
       overrides.bloodlust = 0;
       break;
@@ -2348,43 +2353,50 @@ void sim_t::init_fight_style()
     case FIGHT_STYLE_CLEAVE_ADD:
     {
       auto first_and_duration = static_cast<unsigned>( max_time.total_seconds() * 0.05 );
-      auto cooldown = static_cast<unsigned>( max_time.total_seconds() * 0.075 );
-      auto last = static_cast<unsigned>( max_time.total_seconds() * 0.90 );
+      auto cooldown           = static_cast<unsigned>( max_time.total_seconds() * 0.075 );
+      auto last               = static_cast<unsigned>( max_time.total_seconds() * 0.90 );
 
-      raid_events_str += fmt::format( "/adds,count=1,first={},cooldown={},duration={},last={}",
-                                      first_and_duration, cooldown, first_and_duration, last );
+      raid_events_str += fmt::format( "/adds,count=1,first={},cooldown={},duration={},last={}", first_and_duration,
+                                      cooldown, first_and_duration, last );
     }
     break;
 
     case FIGHT_STYLE_LIGHT_MOVEMENT:
-      raid_events_str += "/movement,players_only=1,cooldown=40,cooldown_stddev=10,distance=15,move_distance_min=10,move_distance_max=20,first=15";
+      raid_events_str +=
+          "/movement,players_only=1,cooldown=40,cooldown_stddev=10,distance=15,move_distance_min=10,move_distance_max="
+          "20,first=15";
       break;
 
     case FIGHT_STYLE_HEAVY_MOVEMENT:
-      raid_events_str += "/movement,players_only=1,cooldown=20,cooldown_stddev=15,distance=25,move_distance_min=20,move_distance_max=30,first=15";
-      raid_events_str += "/movement,players_only=1,cooldown=45,cooldown_stddev=15,distance=45,move_distance_min=40,move_distance_max=50,first=30";
+      raid_events_str +=
+          "/movement,players_only=1,cooldown=20,cooldown_stddev=15,distance=25,move_distance_min=20,move_distance_max="
+          "30,first=15";
+      raid_events_str +=
+          "/movement,players_only=1,cooldown=45,cooldown_stddev=15,distance=45,move_distance_min=40,move_distance_max="
+          "50,first=30";
       break;
 
     case FIGHT_STYLE_BEASTLORD:
     {
       deprecated = true;
-      raid_events_str += "/adds,name=Pack_Beast,count=6,"
-        "first=15,duration=10,cooldown=30,angle_start=0,angle_end=360,distance=3";
-      raid_events_str += "/adds,name=Heavy_Spear,count=2,"
-        "first=15,duration=15,cooldown=20,spawn_x=-15,spawn_y=0,distance=15";
+      raid_events_str +=
+          "/adds,name=Pack_Beast,count=6,"
+          "first=15,duration=10,cooldown=30,angle_start=0,angle_end=360,distance=3";
+      raid_events_str +=
+          "/adds,name=Heavy_Spear,count=2,"
+          "first=15,duration=15,cooldown=20,spawn_x=-15,spawn_y=0,distance=15";
       raid_events_str += "/movement,first=13,distance=5,cooldown=20,players_only=1,player_chance=0.1";
 
       auto beast_duration = static_cast<int>( max_time.total_seconds() * 0.15 );
       auto beast_cooldown = static_cast<int>( max_time.total_seconds() * 0.25 );
       // Ensure min cooldown (cd - 6*stddev) is larger than duration
-      auto beast_cooldown_stddev = std::max(
-        static_cast<int>( ( beast_duration - beast_cooldown ) / 6.0 ) - 1, 0 );
-      auto beast_last = static_cast<unsigned>( max_time.total_seconds() * 0.65 );
+      auto beast_cooldown_stddev = std::max( static_cast<int>( ( beast_duration - beast_cooldown ) / 6.0 ) - 1, 0 );
+      auto beast_last            = static_cast<unsigned>( max_time.total_seconds() * 0.65 );
 
-      raid_events_str += fmt::format( "/adds,name=Beast,count=1,first=10,duration_stddev=5,"
-                                      "duration={},cooldown={},cooldown_stddev={},last={}",
-                                      beast_duration, beast_cooldown, beast_cooldown_stddev,
-                                      beast_last );
+      raid_events_str += fmt::format(
+          "/adds,name=Beast,count=1,first=10,duration_stddev=5,"
+          "duration={},cooldown={},cooldown_stddev={},last={}",
+          beast_duration, beast_cooldown, beast_cooldown_stddev, beast_last );
     }
     break;
 
@@ -2397,9 +2409,9 @@ void sim_t::init_fight_style()
       break;
 
     case FIGHT_STYLE_ULTRAXION:
-      deprecated = true;
-      max_time = timespan_t::from_seconds( 366.0 );
-      fixed_time = true;
+      deprecated         = true;
+      max_time           = timespan_t::from_seconds( 366.0 );
+      fixed_time         = true;
       vary_combat_length = 0.0;
       raid_events_str += "/flying,first=0,duration=500,cooldown=500";
       raid_events_str += "/position_switch,first=0,duration=500,cooldown=500";
@@ -2438,19 +2450,19 @@ void sim_t::init_parties()
   int party_index = 0;
   for ( const auto& party_str : party_encoding )
   {
-    if (util::str_compare_ci(party_str, "reset"))
+    if ( util::str_compare_ci( party_str, "reset" ) )
     {
       party_index = 0;
       for ( auto& player : player_list )
       {
-        player -> party = 0;
+        player->party = 0;
       }
     }
-    else if (util::str_compare_ci(party_str, "all"))
+    else if ( util::str_compare_ci( party_str, "all" ) )
     {
       for ( auto& player : player_list )
       {
-        player -> party = 1;
+        player->party = 1;
       }
     }
     else
@@ -2466,10 +2478,10 @@ void sim_t::init_parties()
         {
           throw sc_invalid_sim_argument( fmt::format( "Player '{}' not found for party creation.", player_name ) );
         }
-        p -> party = party_index;
-        for ( auto& pet : p -> pet_list )
+        p->party = party_index;
+        for ( auto& pet : p->pet_list )
         {
-          pet -> party = party_index;
+          pet->party = party_index;
         }
       }
     }
@@ -2502,14 +2514,13 @@ void sim_t::init_actors()
     {
       if ( i == j )
         continue;
-      if ( player_no_pet_list[j] -> name_str == player_no_pet_list[i] -> name_str )
+      if ( player_no_pet_list[ j ]->name_str == player_no_pet_list[ i ]->name_str )
       {
         errorf( "%s has duplicate name, renaming to %s%s. Please use unique names for all players in simulation.",
-                player_no_pet_list[j] -> name_str.c_str(),
-                player_no_pet_list[j] -> name_str.c_str(),
+                player_no_pet_list[ j ]->name_str.c_str(), player_no_pet_list[ j ]->name_str.c_str(),
                 std::to_string( name_number ).c_str() );
 
-        player_no_pet_list[j] -> name_str += std::to_string( name_number );
+        player_no_pet_list[ j ]->name_str += std::to_string( name_number );
         name_number++;
       }
     }
@@ -2654,7 +2665,7 @@ void sim_t::init_actor_pets()
   {
     player_t* p = target_list[ i ];
 
-    for (auto & elem : p -> pet_list)
+    for ( auto& elem : p->pet_list )
     {
       init_actor( elem );
     }
@@ -2664,7 +2675,7 @@ void sim_t::init_actor_pets()
   {
     player_t* p = player_no_pet_list[ i ];
 
-    for (auto & elem : p -> pet_list)
+    for ( auto& elem : p->pet_list )
     {
       init_actor( elem );
     }
@@ -2687,28 +2698,32 @@ void sim_t::init()
   // Seed RNG
   if ( seed == 0 )
   {
-    if( deterministic )
+    if ( deterministic )
     {
       seed = 31459;
     }
     else
     {
       std::random_device rd;
-      seed  = uint64_t(rd()) | (uint64_t(rd()) << 32);
+      seed = uint64_t( rd() ) | ( uint64_t( rd() ) << 32 );
     }
   }
   _rng.seed( seed + thread_index );
 
-  if (   queue_lag.stddev == 0_ms )   queue_lag.stddev =   queue_lag.mean * 0.25;
-  if (     gcd_lag.stddev == 0_ms )     gcd_lag.stddev =     gcd_lag.mean * 0.25;
-  if ( channel_lag.stddev == 0_ms ) channel_lag.stddev = channel_lag.mean * 0.25;
-  if (   world_lag.stddev  < 0_ms )   world_lag.stddev =   world_lag.mean * 0.1;
+  if ( queue_lag.stddev == 0_ms )
+    queue_lag.stddev = queue_lag.mean * 0.25;
+  if ( gcd_lag.stddev == 0_ms )
+    gcd_lag.stddev = gcd_lag.mean * 0.25;
+  if ( channel_lag.stddev == 0_ms )
+    channel_lag.stddev = channel_lag.mean * 0.25;
+  if ( world_lag.stddev < 0_ms )
+    world_lag.stddev = world_lag.mean * 0.1;
 
   confidence_estimator = rng::stdnormal_inv( 1.0 - ( 1.0 - confidence ) / 2.0 );
 
   if ( challenge_mode && scale_to_itemlevel < 0 )
   {
-    scale_to_itemlevel = 630;
+    scale_to_itemlevel        = 630;
     scale_itemlevel_down_only = true;
   }
   else if ( timewalk > 0 )
@@ -2717,10 +2732,18 @@ void sim_t::init()
     {
       switch ( timewalk )
       {
-        case 45: scale_to_itemlevel = 50; break;
-        case 40: scale_to_itemlevel = 45; break;
-        case 35: scale_to_itemlevel = 40; break;
-        case 30: scale_to_itemlevel = 35; break;
+        case 45:
+          scale_to_itemlevel = 50;
+          break;
+        case 40:
+          scale_to_itemlevel = 45;
+          break;
+        case 35:
+          scale_to_itemlevel = 40;
+          break;
+        case 30:
+          scale_to_itemlevel = 35;
+          break;
       }
     }
     scale_itemlevel_down_only = true;
@@ -2743,20 +2766,50 @@ void sim_t::init()
   {
     fallback_buff_t( sim_t* sim ) : buff_t( sim, "fallback" )
     {
-      is_fallback = true;
-      manual_chance = 0.0;
+      is_fallback    = true;
+      manual_chance  = 0.0;
       default_chance = 0.0;
     }
-    bool trigger( int, double, double, timespan_t ) override { return false; }
-    void execute( int, double, timespan_t ) override { return; }
-    void increment( int, double, timespan_t ) override { return; }
-    void decrement( int, double ) override { return; }
-    void start( int, double, timespan_t ) override { return; }
-    void refresh( int, double, timespan_t ) override { return; }
-    void bump( int, double ) override { return; }
-    void reset() override { return; }
-    void invalidate_cache() override { return; }
-    double check_value() const override { return 0; }
+    bool trigger( int, double, double, timespan_t ) override
+    {
+      return false;
+    }
+    void execute( int, double, timespan_t ) override
+    {
+      return;
+    }
+    void increment( int, double, timespan_t ) override
+    {
+      return;
+    }
+    void decrement( int, double ) override
+    {
+      return;
+    }
+    void start( int, double, timespan_t ) override
+    {
+      return;
+    }
+    void refresh( int, double, timespan_t ) override
+    {
+      return;
+    }
+    void bump( int, double ) override
+    {
+      return;
+    }
+    void reset() override
+    {
+      return;
+    }
+    void invalidate_cache() override
+    {
+      return;
+    }
+    double check_value() const override
+    {
+      return 0;
+    }
   };
 
   auras.fallback = make_buff<fallback_buff_t>( this );
@@ -2793,7 +2846,7 @@ void sim_t::init()
   {
     if ( main_target_str.empty() && target_list.empty() )
     {
-      target = module_t::enemy()->create_player( this, "Dungeon" );
+      target                   = module_t::enemy()->create_player( this, "Dungeon" );
       target->initial.sleeping = target->base.sleeping = target->current.sleeping = true;
     }
     else
@@ -2805,9 +2858,8 @@ void sim_t::init()
           target->quiet = true;
       }
 
-      range::for_each( target_list, []( player_t* t ) {
-        t->initial.sleeping = t->base.sleeping = t->current.sleeping = true;
-      } );
+      range::for_each( target_list,
+                       []( player_t* t ) { t->initial.sleeping = t->base.sleeping = t->current.sleeping = true; } );
     }
   }
   else if ( !target_list.empty() )
@@ -2834,7 +2886,7 @@ void sim_t::init()
   {
     active_player = nullptr;
     active_player =
-      module_t::enemy()->create_player( this, "Dummy_Enemy_" + util::to_string( count_additional_enemy ) );
+        module_t::enemy()->create_player( this, "Dummy_Enemy_" + util::to_string( count_additional_enemy ) );
     count_additional_enemy++;
     if ( !active_player )
     {
@@ -2844,12 +2896,12 @@ void sim_t::init()
 
   // create additional tank enemies here
   int desired_target_count = as<int>( target_list.size() ) + desired_tank_targets - 1;
-  count_additional_enemy = 1;
+  count_additional_enemy   = 1;
   while ( as<int>( target_list.size() ) < desired_target_count )
   {
     active_player = nullptr;
     active_player = module_t::tank_dummy_enemy()->create_player(
-      this, "Tank_Dummy_Enemy_" + util::to_string( count_additional_enemy ) );
+        this, "Tank_Dummy_Enemy_" + util::to_string( count_additional_enemy ) );
     count_additional_enemy++;
     if ( !active_player )
     {
@@ -2861,8 +2913,8 @@ void sim_t::init()
   {
     for ( const auto* p : player_no_pet_list )
     {
-       if ( max_player_level < p -> level() )
-        max_player_level = p -> level();
+      if ( max_player_level < p->level() )
+        max_player_level = p->level();
     }
   }
 
@@ -2875,16 +2927,16 @@ void sim_t::init()
         ++healers;
     }
     if ( healers > 0 || healing > 0 )
-      heal_target = module_t::heal_enemy() -> create_player( this, "Healing_Target", RACE_NONE );
+      heal_target = module_t::heal_enemy()->create_player( this, "Healing_Target", RACE_NONE );
     if ( healing > 1 )
     {
       int targets_create = healing;
       do
       {
-        heal_target = module_t::heal_enemy() -> create_player( this, "Healing_Target_" + util::to_string( targets_create ), RACE_NONE );
+        heal_target = module_t::heal_enemy()->create_player(
+            this, "Healing_Target_" + util::to_string( targets_create ), RACE_NONE );
         targets_create--;
-      }
-      while ( targets_create > 1 );
+      } while ( targets_create > 1 );
     }
   }
 
@@ -2893,14 +2945,15 @@ void sim_t::init()
   // Initialize actors
   init_actors();
 
-  if ( report_precision < 0 ) report_precision = 2;
+  if ( report_precision < 0 )
+    report_precision = 2;
 
   raid_dps.reserve( std::min( iterations, 10000 ) );
   simulation_length.reserve( std::min( iterations, 10000 ) );
 
   for ( const auto& player : player_list )
   {
-    if ( player ->resource_regeneration ==  regen_type::STATIC )
+    if ( player->resource_regeneration == regen_type::STATIC )
     {
       requires_regen_event = true;
       break;
@@ -2935,8 +2988,8 @@ void sim_t::init()
     if ( !verify_use_items_state )
     {
       error(
-        "Disable this warning by adding 'use_item' actions into the action priority list for the actor(s), or set "
-        "'use_item_verification=0' in your SimulationCraft input." );
+          "Disable this warning by adding 'use_item' actions into the action priority list for the actor(s), or set "
+          "'use_item_verification=0' in your SimulationCraft input." );
     }
   }
 
@@ -2950,7 +3003,7 @@ void sim_t::init()
 
   initialized = true;
 
-  init_time = chrono::elapsed(start_time);
+  init_time = chrono::elapsed( start_time );
 
   if ( canceled && !rethrow_exception_queue() )
   {
@@ -2965,7 +3018,8 @@ void sim_t::analyze()
   const auto start_time = chrono::wall_clock::now();
 
   simulation_length.analyze();
-  if ( simulation_length.mean() == 0 ) return;
+  if ( simulation_length.mean() == 0 )
+    return;
 
   raid_dps.analyze();
 
@@ -2979,25 +3033,24 @@ void sim_t::analyze()
     std::fflush( stdout );
   }
 
-  
   assert( iterations > 0 );
 
   // Run core analyze for all actor collected data before proceeding to full analysis. This is to prevent errors from
   // when actors access information from each other, e.g. buffs.
   for ( size_t i = 0; i < actor_list.size(); i++ )
   {
-    actor_list[ i ] -> pre_analyze_hook();
-    actor_list[ i ] -> collected_data.analyze( *actor_list[ i ] );
+    actor_list[ i ]->pre_analyze_hook();
+    actor_list[ i ]->collected_data.analyze( *actor_list[ i ] );
   }
 
   for ( size_t i = 0; i < actor_list.size(); i++ )
-    actor_list[ i ] -> analyze( *this );
+    actor_list[ i ]->analyze( *this );
 
   raid_event_t::analyze( this );
 
-  range::sort( players_by_dps,  compare_dps() );
+  range::sort( players_by_dps, compare_dps() );
   range::sort( players_by_priority_dps, compare_priority_dps() );
-  range::sort( players_by_hps,  compare_hps() );
+  range::sort( players_by_hps, compare_hps() );
   range::sort( players_by_hps_plus_aps, compare_hps_plus_aps() );
   range::sort( players_by_dtps, compare_dtps() );
   range::sort( players_by_name, compare_name() );
@@ -3006,7 +3059,7 @@ void sim_t::analyze()
 
   analyze_iteration_data();
 
-  analyze_time = chrono::elapsed(start_time);
+  analyze_time = chrono::elapsed( start_time );
 }
 
 /**
@@ -3016,7 +3069,7 @@ void sim_t::analyze()
 void sim_t::analyze_iteration_data()
 {
   // Only enabled for deterministic simulations for now
-  if ( ! deterministic || report_iteration_data == 0 )
+  if ( !deterministic || report_iteration_data == 0 )
   {
     return;
   }
@@ -3024,8 +3077,8 @@ void sim_t::analyze_iteration_data()
   range::sort( iteration_data, iteration_data_cmp_r );
 
   size_t min_entries = ( min_report_iteration_data == -1 ) ? 5 : static_cast<size_t>( min_report_iteration_data );
-  double n_pct = report_iteration_data / ( report_iteration_data > 1 ? 100.0 : 1.0 );
-  size_t n_entries = std::max( min_entries, static_cast<size_t>( std::ceil( iteration_data.size() * n_pct ) ) );
+  double n_pct       = report_iteration_data / ( report_iteration_data > 1 ? 100.0 : 1.0 );
+  size_t n_entries   = std::max( min_entries, static_cast<size_t>( std::ceil( iteration_data.size() * n_pct ) ) );
 
   // If low + high entries is more than we have data for, we will just print
   // all data out
@@ -3039,7 +3092,6 @@ void sim_t::analyze_iteration_data()
   std::copy( iteration_data.end() - n_entries, iteration_data.end(), std::back_inserter( high_iteration_data ) );
   range::sort( high_iteration_data, iteration_data_cmp );
 }
-
 
 // sim_t::iterate ===========================================================
 
@@ -3081,7 +3133,7 @@ bool sim_t::iterate()
       if ( !canceled )
       {
         current_index = work_queue->pop();
-        more_work = work_queue->more_work();
+        more_work     = work_queue->more_work();
 
         if ( more_work && current_index != old_active )
         {
@@ -3138,14 +3190,14 @@ void sim_t::do_pause()
 {
   if ( parent )
   {
-    parent -> do_pause();
+    parent->do_pause();
   }
   else
   {
     if ( pause_mutex && paused )
     {
-      pause_mutex -> lock();
-      pause_mutex -> unlock();
+      pause_mutex->lock();
+      pause_mutex->unlock();
     }
   }
 }
@@ -3184,25 +3236,25 @@ void sim_t::merge( sim_t& other_sim )
   raid_aps.merge( other_sim.raid_aps );
   event_mgr.merge( other_sim.event_mgr );
 
-  for ( auto & buff : buff_list )
+  for ( auto& buff : buff_list )
   {
-    if ( buff_t* otherbuff = buff_t::find( &other_sim, buff -> name_str ) )
+    if ( buff_t* otherbuff = buff_t::find( &other_sim, buff->name_str ) )
     {
-      buff -> merge( *otherbuff );
+      buff->merge( *otherbuff );
     }
   }
 
-  for ( auto & player : actor_list )
+  for ( auto& player : actor_list )
   {
     // If the player is spawned by a separate wrapper class, it will handle the merging process
-    if ( player -> spawner != nullptr )
+    if ( player->spawner != nullptr )
     {
       continue;
     }
 
-    player_t* other_p = other_sim.find_player( player -> index );
+    player_t* other_p = other_sim.find_player( player->index );
     assert( other_p );
-    player -> merge( *other_p );
+    player->merge( *other_p );
   }
 
   raid_event_t::merge( this, &other_sim );
@@ -3214,7 +3266,7 @@ void sim_t::merge( sim_t& other_sim )
   spawner::merge( *this, other_sim );
 
   range::append( iteration_data, other_sim.iteration_data );
-  merge_time += chrono::elapsed(start_time);
+  merge_time += chrono::elapsed( start_time );
 }
 
 /// merge all sims together
@@ -3231,9 +3283,9 @@ void sim_t::merge()
   {
     if ( child )
     {
-      child -> join();
+      child->join();
       sim_t* copy = child;
-      child = nullptr;
+      child       = nullptr;
       if ( requires_cleanup() )
       {
         delete copy;
@@ -3272,7 +3324,7 @@ void sim_t::run()
 
 void sim_t::partition()
 {
-  iterations = work_queue -> size();
+  iterations = work_queue->size();
 
   if ( threads <= 1 )
     return;
@@ -3281,7 +3333,7 @@ void sim_t::partition()
 
   thread::set_main_thread_priority();
 
-  merge_mutex.lock(); // parent sim is locked until parent merge() is called
+  merge_mutex.lock();  // parent sim is locked until parent merge() is called
 
   int remainder = iterations % threads;
   iterations /= threads;
@@ -3292,7 +3344,7 @@ void sim_t::partition()
 
   if ( deterministic || strict_work_queue )
   {
-    work_queue -> init( iterations );
+    work_queue->init( iterations );
   }
 
   int num_children = threads - 1;
@@ -3312,33 +3364,33 @@ void sim_t::partition()
 
   for ( int i = 0; i < num_children; i++ )
   {
-    auto  child = new sim_t( this, i + 1, child_control );
+    auto child = new sim_t( this, i + 1, child_control );
 
     assert( child );
     children.push_back( child );
 
-    child -> iterations = iterations;
+    child->iterations = iterations;
     if ( remainder )
     {
-      child -> iterations += 1;
+      child->iterations += 1;
       remainder--;
     }
 
-    if( deterministic || strict_work_queue )
+    if ( deterministic || strict_work_queue )
     {
-      child -> work_queue -> init( child -> iterations );
+      child->work_queue->init( child->iterations );
     }
-    else // share the work queue
+    else  // share the work queue
     {
-      child -> work_queue = work_queue;
+      child->work_queue = work_queue;
     }
-    child -> report_progress = 0;
+    child->report_progress = 0;
   }
 
-  computer_process::set_priority( process_priority ); // Set main thread priority
+  computer_process::set_priority( process_priority );  // Set main thread priority
 
-  for ( auto & child : children )
-    child -> launch();
+  for ( auto& child : children )
+    child->launch();
 
   // Safe to do for now, since control is only referenced by sim_t::setup, which is called in the
   // sim_t constructor.
@@ -3383,7 +3435,7 @@ bool sim_t::execute()
 player_t* sim_t::find_player( util::string_view name ) const
 {
   auto it = range::find( actor_list, name, &player_t::name );
-  if ( it != actor_list.end())
+  if ( it != actor_list.end() )
     return *it;
   return nullptr;
 }
@@ -3392,7 +3444,7 @@ player_t* sim_t::find_player( util::string_view name ) const
 player_t* sim_t::find_player( int index ) const
 {
   auto it = range::find( actor_list, index, &player_t::index );
-  if ( it != actor_list.end())
+  if ( it != actor_list.end() )
     return *it;
   return nullptr;
 }
@@ -3418,27 +3470,29 @@ void sim_t::use_optimal_buffs_and_debuffs( int value )
 {
   optimal_raid = value;
 
-  overrides.arcane_intellect        = optimal_raid;
-  overrides.battle_shout            = optimal_raid;
-  overrides.mark_of_the_wild        = optimal_raid;
-  overrides.power_word_fortitude    = optimal_raid;
-  overrides.skyfury                 = optimal_raid;
+  overrides.arcane_intellect     = optimal_raid;
+  overrides.battle_shout         = optimal_raid;
+  overrides.mark_of_the_wild     = optimal_raid;
+  overrides.power_word_fortitude = optimal_raid;
+  overrides.skyfury              = optimal_raid;
 
-  overrides.chaos_brand             = optimal_raid;
-  overrides.mystic_touch            = optimal_raid;
-  overrides.hunters_mark            = optimal_raid;
-  overrides.mortal_wounds           = optimal_raid;
-  overrides.bleeding                = optimal_raid;
+  overrides.chaos_brand   = optimal_raid;
+  overrides.mystic_touch  = optimal_raid;
+  overrides.hunters_mark  = optimal_raid;
+  overrides.mortal_wounds = optimal_raid;
+  overrides.bleeding      = optimal_raid;
 
-  overrides.bloodlust               = optimal_raid;
+  overrides.bloodlust = optimal_raid;
 }
 
 // sim_t::time_to_think =====================================================
 
 bool sim_t::time_to_think( timespan_t proc_time )
 {
-  if ( proc_time == timespan_t::zero() ) return false;
-  if ( proc_time < timespan_t::zero() ) return true;
+  if ( proc_time == timespan_t::zero() )
+    return false;
+  if ( proc_time < timespan_t::zero() )
+    return true;
   return current_time() - proc_time > reaction_time;
 }
 
@@ -3462,14 +3516,11 @@ std::unique_ptr<expr_t> sim_t::create_expression( util::string_view name_str )
     return make_ref_expr( name_str, expected_iteration_time );
 
   if ( util::str_compare_ci( name_str, "fight_remains" ) )
-    return make_fn_expr( name_str, [ this ] {
-      return expected_iteration_time - event_mgr.current_time;
-    } );
+    return make_fn_expr( name_str, [ this ] { return expected_iteration_time - event_mgr.current_time; } );
 
   if ( util::str_compare_ci( name_str, "interpolated_fight_remains" ) )
-    return make_fn_expr( name_str, [ this ] {
-      return max_time * ( 1.0 - event_mgr.current_time / expected_iteration_time );
-    } );
+    return make_fn_expr( name_str,
+                         [ this ] { return max_time * ( 1.0 - event_mgr.current_time / expected_iteration_time ); } );
 
   if ( name_str == "channel_lag" )
     return expr_t::create_constant( name_str, channel_lag.mean );
@@ -3545,7 +3596,7 @@ std::unique_ptr<expr_t> sim_t::create_expression( util::string_view name_str )
           }
         }
 
-        auto divisor = ( nonexecute + execute );
+        auto divisor          = ( nonexecute + execute );
         nonexecute_actors_pct = divisor != 0 ? nonexecute / divisor : 0.0;
       }
 
@@ -3561,8 +3612,8 @@ std::unique_ptr<expr_t> sim_t::create_expression( util::string_view name_str )
 
   if ( splits.size() == 2 && util::str_compare_ci( splits[ 0 ], "fight_style" ) )
   {
-    return expr_t::create_constant(
-        name_str, util::str_compare_ci( util::fight_style_string( fight_style ), splits[ 1 ] ) );
+    return expr_t::create_constant( name_str,
+                                    util::str_compare_ci( util::fight_style_string( fight_style ), splits[ 1 ] ) );
   }
 
   if ( splits.size() == 3 )
@@ -3600,7 +3651,7 @@ std::unique_ptr<expr_t> sim_t::create_expression( util::string_view name_str )
   if ( splits.size() >= 3 && util::str_compare_ci( splits[ 0 ], "raid_event" ) )
   {
     auto type_or_name = splits[ 1 ];
-    auto filter = splits[ 2 ];
+    auto filter       = splits[ 2 ];
 
     // Call once to see if we have a valid raid expression.
     bool is_constant = false;
@@ -3620,7 +3671,8 @@ std::unique_ptr<expr_t> sim_t::create_expression( util::string_view name_str )
 
       raid_event_expr_t( sim_t* s, util::string_view type, util::string_view filter )
         : expr_t( fmt::format( "raid_event_{}_{}", type, filter ) ), s( s ), type( type ), filter( filter )
-      {}
+      {
+      }
 
       double evaluate() override
       {
@@ -3667,7 +3719,7 @@ void sim_t::print_options()
 
 void sim_t::add_option( std::unique_ptr<option_t> opt )
 {
-  options.insert( options.begin(), std::move(opt) );
+  options.insert( options.begin(), std::move( opt ) );
 }
 
 // sim_t::create_options ====================================================
@@ -3765,6 +3817,11 @@ void sim_t::create_options()
   add_option( opt_bool( "override.allow_flasks", allow_flasks ) );
   add_option( opt_bool( "override.allow_augmentations", allow_augmentations ) );
   add_option( opt_bool( "override.bloodlust", overrides.bloodlust ) );
+
+  // Experimental RL control.
+  add_option( opt_bool( "rl_enable", rl_enable ) );
+  add_option( opt_bool( "rl_trace", rl_trace ) );
+  add_option( opt_string( "rl_trace_file", rl_trace_file ) );
   // Regen
   add_option( opt_timespan( "regen_periodicity", regen_periodicity ) );
   // RNG
@@ -3844,36 +3901,36 @@ void sim_t::create_options()
   add_option( opt_map( "override.item_slot.", item_slot_overrides ) );
 
   // Stat Enchants
-  add_option( opt_float( "default_enchant_strength", enchant.attribute[ATTR_STRENGTH] ) );
-  add_option( opt_float( "default_enchant_agility", enchant.attribute[ATTR_AGILITY] ) );
-  add_option( opt_float( "default_enchant_stamina", enchant.attribute[ATTR_STAMINA] ) );
-  add_option( opt_float( "default_enchant_intellect", enchant.attribute[ATTR_INTELLECT] ) );
-  add_option( opt_float( "default_enchant_spirit", enchant.attribute[ATTR_SPIRIT] ) );
+  add_option( opt_float( "default_enchant_strength", enchant.attribute[ ATTR_STRENGTH ] ) );
+  add_option( opt_float( "default_enchant_agility", enchant.attribute[ ATTR_AGILITY ] ) );
+  add_option( opt_float( "default_enchant_stamina", enchant.attribute[ ATTR_STAMINA ] ) );
+  add_option( opt_float( "default_enchant_intellect", enchant.attribute[ ATTR_INTELLECT ] ) );
+  add_option( opt_float( "default_enchant_spirit", enchant.attribute[ ATTR_SPIRIT ] ) );
   add_option( opt_float( "default_enchant_spell_power", enchant.spell_power ) );
   add_option( opt_float( "default_enchant_attack_power", enchant.attack_power ) );
   add_option( opt_float( "default_enchant_haste_rating", enchant.haste_rating ) );
   add_option( opt_float( "default_enchant_mastery_rating", enchant.mastery_rating ) );
   add_option( opt_float( "default_enchant_crit_rating", enchant.crit_rating ) );
   add_option( opt_float( "default_enchant_versatility_rating", enchant.versatility_rating ) );
-  add_option( opt_float( "default_enchant_health", enchant.resource[RESOURCE_HEALTH] ) );
-  add_option( opt_float( "default_enchant_mana", enchant.resource[RESOURCE_MANA] ) );
-  add_option( opt_float( "default_enchant_rage", enchant.resource[RESOURCE_RAGE] ) );
-  add_option( opt_float( "default_enchant_energy", enchant.resource[RESOURCE_ENERGY] ) );
-  add_option( opt_float( "default_enchant_focus", enchant.resource[RESOURCE_FOCUS] ) );
-  add_option( opt_float( "default_enchant_runic", enchant.resource[RESOURCE_RUNIC_POWER] ) );
+  add_option( opt_float( "default_enchant_health", enchant.resource[ RESOURCE_HEALTH ] ) );
+  add_option( opt_float( "default_enchant_mana", enchant.resource[ RESOURCE_MANA ] ) );
+  add_option( opt_float( "default_enchant_rage", enchant.resource[ RESOURCE_RAGE ] ) );
+  add_option( opt_float( "default_enchant_energy", enchant.resource[ RESOURCE_ENERGY ] ) );
+  add_option( opt_float( "default_enchant_focus", enchant.resource[ RESOURCE_FOCUS ] ) );
+  add_option( opt_float( "default_enchant_runic", enchant.resource[ RESOURCE_RUNIC_POWER ] ) );
   // Report
   add_option( opt_int( "display_build", display_build ) );
   add_option( opt_int( "report_precision", report_precision ) );
   add_option( opt_bool( "report_pets_separately", report_pets_separately ) );
   add_option( opt_bool( "report_targets", report_targets ) );
   add_option( opt_bool( "report_details", report_details ) );
-  add_option( opt_func( "report_merged_stats", parse_report_merged_stats) );
+  add_option( opt_func( "report_merged_stats", parse_report_merged_stats ) );
   add_option( opt_bool( "full_damage_sources_chart", full_damage_sources_chart ) );
   add_option( opt_bool( "report_all_variables", report_all_variables ) );
   add_option( opt_bool( "report_rng", report_rng ) );
   add_option( opt_int( "statistics_level", statistics_level ) );
   add_option( opt_bool( "separate_stats_by_actions", separate_stats_by_actions ) );
-  add_option( opt_bool( "report_raid_summary", report_raid_summary ) ); // Force reporting of raid summary
+  add_option( opt_bool( "report_raid_summary", report_raid_summary ) );  // Force reporting of raid summary
   add_option( opt_string( "reforge_plot_output_file", reforge_plot_output_file_str ) );
   add_option( opt_bool( "monitor_cpu", event_mgr.monitor_cpu ) );
   add_option( opt_func( "maximize_reporting", parse_maximize_reporting ) );
@@ -3904,234 +3961,270 @@ void sim_t::create_options()
   add_option( opt_int( "legion.engine_of_eradication_orbs", legion_opts.engine_of_eradication_orbs, 0, 4 ) );
   add_option( opt_int( "legion.void_stalkers_contract_targets", legion_opts.void_stalkers_contract_targets ) );
   add_option( opt_float( "legion.specter_of_betrayal_overlap", legion_opts.specter_of_betrayal_overlap, 0, 1 ) );
-  add_option( opt_func( "legion.cradle_of_anguish_resets", []( sim_t* sim, util::string_view, util::string_view value ) {
-    auto split = util::string_split<util::string_view>( value, ":/," );
-    range::for_each( split, [ sim ]( util::string_view str ) {
-      auto v = util::to_double( str );
-      if ( v <= 0.0 )
-      {
-        return;
-      }
+  add_option(
+      opt_func( "legion.cradle_of_anguish_resets", []( sim_t* sim, util::string_view, util::string_view value ) {
+        auto split = util::string_split<util::string_view>( value, ":/," );
+        range::for_each( split, [ sim ]( util::string_view str ) {
+          auto v = util::to_double( str );
+          if ( v <= 0.0 )
+          {
+            return;
+          }
 
-      auto it = range::find( sim -> legion_opts.cradle_of_anguish_resets, v );
-      if ( it != sim -> legion_opts.cradle_of_anguish_resets.end() )
-      {
-        return;
-      }
+          auto it = range::find( sim->legion_opts.cradle_of_anguish_resets, v );
+          if ( it != sim->legion_opts.cradle_of_anguish_resets.end() )
+          {
+            return;
+          }
 
-      sim -> legion_opts.cradle_of_anguish_resets.push_back( v );
-    } );
-    return true;
-  } ) );
+          sim->legion_opts.cradle_of_anguish_resets.push_back( v );
+        } );
+        return true;
+      } ) );
 
   // Battle for Azeroth
   add_option( opt_func( "disable_azerite", []( sim_t* sim, util::string_view, util::string_view value ) {
     if ( value == "1" )
     {
-      sim -> azerite_status = azerite_control::DISABLED_ALL;
+      sim->azerite_status = azerite_control::DISABLED_ALL;
     }
     else if ( util::str_compare_ci( value, "items" ) )
     {
-      sim -> azerite_status = azerite_control::DISABLED_ITEMS;
+      sim->azerite_status = azerite_control::DISABLED_ITEMS;
     }
     else if ( util::str_compare_ci( value, "all" ) )
     {
-      sim -> azerite_status = azerite_control::DISABLED_ALL;
+      sim->azerite_status = azerite_control::DISABLED_ALL;
     }
     else if ( util::str_compare_ci( value, "0" ) || util::str_compare_ci( value, "false" ) )
     {
-     sim -> azerite_status = azerite_control::ENABLED;
+      sim->azerite_status = azerite_control::ENABLED;
     }
     else
     {
-      sim -> error( "Unknown disable_azerite value '{}', valid values are 'items' or 'all'",
-          value );
+      sim->error( "Unknown disable_azerite value '{}', valid values are 'items' or 'all'", value );
       return false;
     }
     return true;
   } ) );
 
   add_option( opt_uint( "bfa.jes_howler_allies", bfa_opts.jes_howler_allies, 0, 4 ) );
-  add_option( opt_float( "bfa.secrets_of_the_deep_chance",
-        bfa_opts.secrets_of_the_deep_chance, 0, 1 ) );
-  add_option( opt_float( "bfa.secrets_of_the_deep_collect_chance",
-        bfa_opts.secrets_of_the_deep_collect_chance, 0, 1 ) );
-  add_option( opt_int( "bfa.initial_archive_of_the_titans_stacks",
-        bfa_opts.initial_archive_of_the_titans_stacks, 0, 20 ) );
-  add_option( opt_int( "bfa.reorigination_array_stacks",
-        bfa_opts.reorigination_array_stacks, 0, 10 ) );
-  add_option( opt_bool( "bfa.reorigination_array_ignore_scale_factors",
-        bfa_opts.reorigination_array_ignore_scale_factors ) );
-  add_option( opt_float( "bfa.seductive_power_pickup_chance",
-        bfa_opts.seductive_power_pickup_chance, 0.0, 1.0 ) );
-  add_option( opt_int( "bfa.initial_seductive_power_stacks",
-        bfa_opts.initial_seductive_power_stacks, 0, 5 ) );
-  add_option( opt_bool( "bfa.randomize_oscillation",
-        bfa_opts.randomize_oscillation ) );
-  add_option( opt_bool( "bfa.auto_oscillating_overload",
-        bfa_opts.auto_oscillating_overload ) );
-  add_option( opt_bool( "bfa.zuldazar",
-        bfa_opts.zuldazar ) );
-  add_option( opt_timespan( "bfa.covenant_period",
-        bfa_opts.covenant_period, 1_ms, timespan_t::max() ) );
-  add_option( opt_float( "bfa.covenant_chance",
-        bfa_opts.covenant_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.incandescent_sliver_chance",
-        bfa_opts.incandescent_sliver_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "bfa.fight_or_flight_period",
-        bfa_opts.fight_or_flight_period, 1_ms, timespan_t::max() ) );
-  add_option( opt_float( "bfa.fight_or_flight_chance",
-        bfa_opts.fight_or_flight_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.secrets_of_the_deep_chance", bfa_opts.secrets_of_the_deep_chance, 0, 1 ) );
+  add_option(
+      opt_float( "bfa.secrets_of_the_deep_collect_chance", bfa_opts.secrets_of_the_deep_collect_chance, 0, 1 ) );
+  add_option(
+      opt_int( "bfa.initial_archive_of_the_titans_stacks", bfa_opts.initial_archive_of_the_titans_stacks, 0, 20 ) );
+  add_option( opt_int( "bfa.reorigination_array_stacks", bfa_opts.reorigination_array_stacks, 0, 10 ) );
+  add_option(
+      opt_bool( "bfa.reorigination_array_ignore_scale_factors", bfa_opts.reorigination_array_ignore_scale_factors ) );
+  add_option( opt_float( "bfa.seductive_power_pickup_chance", bfa_opts.seductive_power_pickup_chance, 0.0, 1.0 ) );
+  add_option( opt_int( "bfa.initial_seductive_power_stacks", bfa_opts.initial_seductive_power_stacks, 0, 5 ) );
+  add_option( opt_bool( "bfa.randomize_oscillation", bfa_opts.randomize_oscillation ) );
+  add_option( opt_bool( "bfa.auto_oscillating_overload", bfa_opts.auto_oscillating_overload ) );
+  add_option( opt_bool( "bfa.zuldazar", bfa_opts.zuldazar ) );
+  add_option( opt_timespan( "bfa.covenant_period", bfa_opts.covenant_period, 1_ms, timespan_t::max() ) );
+  add_option( opt_float( "bfa.covenant_chance", bfa_opts.covenant_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.incandescent_sliver_chance", bfa_opts.incandescent_sliver_chance, 0.0, 1.0 ) );
+  add_option( opt_timespan( "bfa.fight_or_flight_period", bfa_opts.fight_or_flight_period, 1_ms, timespan_t::max() ) );
+  add_option( opt_float( "bfa.fight_or_flight_chance", bfa_opts.fight_or_flight_chance, 0.0, 1.0 ) );
   add_option( opt_float( "bfa.harbingers_inscrutable_will_silence_chance",
-        bfa_opts.harbingers_inscrutable_will_silence_chance, 0.0, 1.0 ) );
+                         bfa_opts.harbingers_inscrutable_will_silence_chance, 0.0, 1.0 ) );
   add_option( opt_float( "bfa.harbingers_inscrutable_will_move_chance",
-        bfa_opts.harbingers_inscrutable_will_move_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.aberrant_tidesage_damage_chance",
-        bfa_opts.aberrant_tidesage_damage_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.fathuuls_floodguards_damage_chance",
-        bfa_opts.fathuuls_floodguards_damage_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.grips_of_forsaken_sanity_damage_chance",
-        bfa_opts.grips_of_forsaken_sanity_damage_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.stormglide_steps_take_damage_chance",
-        bfa_opts.stormglide_steps_take_damage_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "bfa.lurkers_insidious_gift_duration",
-        bfa_opts.lurkers_insidious_gift_duration, 0_ms, timespan_t::max() ) );
+                         bfa_opts.harbingers_inscrutable_will_move_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.aberrant_tidesage_damage_chance", bfa_opts.aberrant_tidesage_damage_chance, 0.0, 1.0 ) );
+  add_option(
+      opt_float( "bfa.fathuuls_floodguards_damage_chance", bfa_opts.fathuuls_floodguards_damage_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.grips_of_forsaken_sanity_damage_chance", bfa_opts.grips_of_forsaken_sanity_damage_chance,
+                         0.0, 1.0 ) );
+  add_option(
+      opt_float( "bfa.stormglide_steps_take_damage_chance", bfa_opts.stormglide_steps_take_damage_chance, 0.0, 1.0 ) );
+  add_option( opt_timespan( "bfa.lurkers_insidious_gift_duration", bfa_opts.lurkers_insidious_gift_duration, 0_ms,
+                            timespan_t::max() ) );
   add_option( opt_timespan( "bfa.abyssal_speakers_gauntlets_shield_duration",
-        bfa_opts.abyssal_speakers_gauntlets_shield_duration, 0_ms, timespan_t::max() ) );
-  add_option( opt_timespan( "bfa.trident_of_deep_ocean_duration",
-        bfa_opts.trident_of_deep_ocean_duration, 0_ms, timespan_t::max() ) );
-  add_option( opt_float( "bfa.legplates_of_unbound_anguish_chance",
-        bfa_opts.legplates_of_unbound_anguish_chance, 0.0, 1.0 ) );
-  add_option( opt_int( "bfa.loyal_to_the_end_allies",
-        bfa_opts.loyal_to_the_end_allies, 0, 4 ) );
-  add_option( opt_timespan( "bfa.loyal_to_the_end_ally_death_timer",
-        bfa_opts.loyal_to_the_end_ally_death_timer, 1_s, timespan_t::max() ) );
-  add_option( opt_float( "bfa.loyal_to_the_end_ally_death_chance",
-        bfa_opts.loyal_to_the_end_ally_death_chance, 0.0, 1.0 ) );
-  add_option( opt_int( "bfa.worldvein_allies",
-        bfa_opts.worldvein_allies, 0, 10 ) );
-  add_option( opt_float( "bfa.ripple_in_space_proc_chance",
-        bfa_opts.ripple_in_space_proc_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.blood_of_the_enemy_in_range",
-        bfa_opts.blood_of_the_enemy_in_range, 0.0, 1.0 ) );
-  add_option( opt_timespan( "bfa.undulating_tides_lockout_timer",
-        bfa_opts.undulating_tides_lockout_timer, 1_s, timespan_t::max() ) );
-  add_option( opt_float( "bfa.undulating_tides_lockout_chance",
-        bfa_opts.undulating_tides_lockout_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.leviathans_lure_base_rppm",
-        bfa_opts.leviathans_lure_base_rppm, 0.0, 2.0 ) );
-  add_option( opt_float( "bfa.aquipotent_nautilus_catch_chance",
-        bfa_opts.aquipotent_nautilus_catch_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "bfa.zaquls_portal_key_move_chance",
-        bfa_opts.zaquls_portal_key_move_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "bfa.anuazshara_unleash_time",
-        bfa_opts.anuazshara_unleash_time, 1_s, timespan_t::max() ) );
-  add_option( opt_bool( "bfa.nazjatar",
-        bfa_opts.nazjatar ) );
-  add_option( opt_bool( "bfa.shiver_venom",
-        bfa_opts.shiver_venom ) );
-  add_option( opt_float( "bfa.storm_of_the_eternal_ratio",
-        bfa_opts.storm_of_the_eternal_ratio, 0.0, 1.0 ) );
-  add_option( opt_timespan( "bfa.font_of_power_precombat_channel",
-        bfa_opts.font_of_power_precombat_channel, 0_ms, 34_s ) );
-  add_option( opt_uint( "bfa.arcane_heart_hps", bfa_opts.arcane_heart_hps) );
+                            bfa_opts.abyssal_speakers_gauntlets_shield_duration, 0_ms, timespan_t::max() ) );
+  add_option( opt_timespan( "bfa.trident_of_deep_ocean_duration", bfa_opts.trident_of_deep_ocean_duration, 0_ms,
+                            timespan_t::max() ) );
+  add_option(
+      opt_float( "bfa.legplates_of_unbound_anguish_chance", bfa_opts.legplates_of_unbound_anguish_chance, 0.0, 1.0 ) );
+  add_option( opt_int( "bfa.loyal_to_the_end_allies", bfa_opts.loyal_to_the_end_allies, 0, 4 ) );
+  add_option( opt_timespan( "bfa.loyal_to_the_end_ally_death_timer", bfa_opts.loyal_to_the_end_ally_death_timer, 1_s,
+                            timespan_t::max() ) );
+  add_option(
+      opt_float( "bfa.loyal_to_the_end_ally_death_chance", bfa_opts.loyal_to_the_end_ally_death_chance, 0.0, 1.0 ) );
+  add_option( opt_int( "bfa.worldvein_allies", bfa_opts.worldvein_allies, 0, 10 ) );
+  add_option( opt_float( "bfa.ripple_in_space_proc_chance", bfa_opts.ripple_in_space_proc_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.blood_of_the_enemy_in_range", bfa_opts.blood_of_the_enemy_in_range, 0.0, 1.0 ) );
+  add_option( opt_timespan( "bfa.undulating_tides_lockout_timer", bfa_opts.undulating_tides_lockout_timer, 1_s,
+                            timespan_t::max() ) );
+  add_option( opt_float( "bfa.undulating_tides_lockout_chance", bfa_opts.undulating_tides_lockout_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.leviathans_lure_base_rppm", bfa_opts.leviathans_lure_base_rppm, 0.0, 2.0 ) );
+  add_option(
+      opt_float( "bfa.aquipotent_nautilus_catch_chance", bfa_opts.aquipotent_nautilus_catch_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "bfa.zaquls_portal_key_move_chance", bfa_opts.zaquls_portal_key_move_chance, 0.0, 1.0 ) );
+  add_option( opt_timespan( "bfa.anuazshara_unleash_time", bfa_opts.anuazshara_unleash_time, 1_s, timespan_t::max() ) );
+  add_option( opt_bool( "bfa.nazjatar", bfa_opts.nazjatar ) );
+  add_option( opt_bool( "bfa.shiver_venom", bfa_opts.shiver_venom ) );
+  add_option( opt_float( "bfa.storm_of_the_eternal_ratio", bfa_opts.storm_of_the_eternal_ratio, 0.0, 1.0 ) );
+  add_option(
+      opt_timespan( "bfa.font_of_power_precombat_channel", bfa_opts.font_of_power_precombat_channel, 0_ms, 34_s ) );
+  add_option( opt_uint( "bfa.arcane_heart_hps", bfa_opts.arcane_heart_hps ) );
   add_option( opt_int( "bfa.subroutine_recalibration_precombat_stacks",
-    bfa_opts.subroutine_recalibration_precombat_stacks, 0, 11 ) );
-  add_option( opt_int( "bfa.subroutine_recalibration_dummy_casts",
-    bfa_opts.subroutine_recalibration_dummy_casts, 0, 11 ) );
+                       bfa_opts.subroutine_recalibration_precombat_stacks, 0, 11 ) );
+  add_option(
+      opt_int( "bfa.subroutine_recalibration_dummy_casts", bfa_opts.subroutine_recalibration_dummy_casts, 0, 11 ) );
   add_option( opt_float( "bfa.voidtwisted_titanshard_percent_duration",
-    bfa_opts.voidtwisted_titanshard_percent_duration, 0.01, 1.0 ) );
+                         bfa_opts.voidtwisted_titanshard_percent_duration, 0.01, 1.0 ) );
   add_option( opt_timespan( "bfa.surging_vitality_damage_taken_period", bfa_opts.surging_vitality_damage_taken_period,
                             1_s, timespan_t::max() ) );
   add_option( opt_uint( "bfa.manifesto_allies_start", bfa_opts.manifesto_allies_start, 0, 12 ) );
   add_option( opt_uint( "bfa.manifesto_allies_end", bfa_opts.manifesto_allies_end, 0, 5 ) );
-  add_option( opt_timespan( "bfa.symbiotic_presence_interval", bfa_opts.symbiotic_presence_interval, 1_s, timespan_t::max() ) );
-  add_option( opt_float( "bfa.whispered_truths_offensive_chance", bfa_opts.whispered_truths_offensive_chance, 0.0, 1.0 ) );
+  add_option(
+      opt_timespan( "bfa.symbiotic_presence_interval", bfa_opts.symbiotic_presence_interval, 1_s, timespan_t::max() ) );
+  add_option(
+      opt_float( "bfa.whispered_truths_offensive_chance", bfa_opts.whispered_truths_offensive_chance, 0.0, 1.0 ) );
   add_option( opt_bool( "bfa.nyalotha", bfa_opts.nyalotha ) );
 
   // Shadowlands
   add_option( opt_bool( "shadowlands.enabled", shadowlands_opts.enabled ) );
-  add_option( opt_float( "shadowlands.combat_meditation_extend_chance", shadowlands_opts.combat_meditation_extend_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.combat_meditation_extend_chance",
+                         shadowlands_opts.combat_meditation_extend_chance, 0.0, 1.0 ) );
   add_option( opt_uint( "shadowlands.pointed_courage_nearby", shadowlands_opts.pointed_courage_nearby, 0, 3 ) );
   add_option( opt_int( "shadowlands.lead_by_example_nearby", shadowlands_opts.lead_by_example_nearby, 0, 4 ) );
-  add_option( opt_uint( "shadowlands.stone_legionnaires_in_party", shadowlands_opts.stone_legionnaires_in_party, 0, 4 ) );
+  add_option(
+      opt_uint( "shadowlands.stone_legionnaires_in_party", shadowlands_opts.stone_legionnaires_in_party, 0, 4 ) );
   add_option( opt_uint( "shadowlands.crimson_choir_in_party", shadowlands_opts.crimson_choir_in_party, 0, 4 ) );
-  add_option( opt_timespan( "shadowlands.memory_of_past_sins_precast", shadowlands_opts.memory_of_past_sins_precast, 0_s, 30_s ) );
+  add_option( opt_timespan( "shadowlands.memory_of_past_sins_precast", shadowlands_opts.memory_of_past_sins_precast,
+                            0_s, 30_s ) );
   add_option( opt_uint( "shadowlands.shattered_psyche_allies", shadowlands_opts.shattered_psyche_allies, 0, 4 ) );
-  add_option( opt_float( "shadowlands.judgment_of_the_arbiter_arc_chance", shadowlands_opts.judgment_of_the_arbiter_arc_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.judgment_of_the_arbiter_arc_chance",
+                         shadowlands_opts.judgment_of_the_arbiter_arc_chance, 0.0, 1.0 ) );
   add_option( opt_string( "shadowlands.volatile_solvent_type", shadowlands_opts.volatile_solvent_type ) );
-  add_option( opt_bool( "shadowlands.disable_soul_igniter_second_use", shadowlands_opts.disable_soul_igniter_second_use ) );
+  add_option(
+      opt_bool( "shadowlands.disable_soul_igniter_second_use", shadowlands_opts.disable_soul_igniter_second_use ) );
   add_option( opt_string( "shadowlands.unbound_changeling_stat_type", shadowlands_opts.unbound_changeling_stat_type ) );
-  add_option( opt_float( "shadowlands.anima_field_emitter_mean", shadowlands_opts.anima_field_emitter_mean, 0.0, std::numeric_limits<double>::max() ) );
-  add_option( opt_float( "shadowlands.anima_field_emitter_stddev", shadowlands_opts.anima_field_emitter_stddev, 0.0, std::numeric_limits<double>::max() ) );
+  add_option( opt_float( "shadowlands.anima_field_emitter_mean", shadowlands_opts.anima_field_emitter_mean, 0.0,
+                         std::numeric_limits<double>::max() ) );
+  add_option( opt_float( "shadowlands.anima_field_emitter_stddev", shadowlands_opts.anima_field_emitter_stddev, 0.0,
+                         std::numeric_limits<double>::max() ) );
   add_option( opt_timespan( "shadowlands.retarget_shadowgrasp_totem", shadowlands_opts.retarget_shadowgrasp_totem ) );
   add_option( opt_bool( "shadowlands.disable_iqd_execute", shadowlands_opts.disable_iqd_execute ) );
-  add_option( opt_float( "shadowlands.gluttonous_spike_overheal_chance", shadowlands_opts.gluttonous_spike_overheal_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.gluttonous_spike_overheal_chance",
+                         shadowlands_opts.gluttonous_spike_overheal_chance, 0.0, 1.0 ) );
   add_option( opt_float( "shadowlands.iqd_stat_fail_chance", shadowlands_opts.iqd_stat_fail_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "shadowlands.thrill_seeker_killing_blow_chance", shadowlands_opts.thrill_seeker_killing_blow_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "shadowlands.wild_hunt_tactics_duration_multiplier", shadowlands_opts.wild_hunt_tactics_duration_multiplier ) );
-  add_option( opt_float( "shadowlands.bonded_hearts_other_covenant_chance", shadowlands_opts.bonded_hearts_other_covenant_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.thrill_seeker_killing_blow_chance",
+                         shadowlands_opts.thrill_seeker_killing_blow_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.wild_hunt_tactics_duration_multiplier",
+                         shadowlands_opts.wild_hunt_tactics_duration_multiplier ) );
+  add_option( opt_float( "shadowlands.bonded_hearts_other_covenant_chance",
+                         shadowlands_opts.bonded_hearts_other_covenant_chance, 0.0, 1.0 ) );
   add_option( opt_string( "shadowlands.party_favor_type", shadowlands_opts.party_favor_type ) );
-  add_option( opt_int( "shadowlands.battlefield_presence_enemies", shadowlands_opts.battlefield_presence_enemies, 0, 3 ) );
+  add_option(
+      opt_int( "shadowlands.battlefield_presence_enemies", shadowlands_opts.battlefield_presence_enemies, 0, 3 ) );
   add_option( opt_bool( "shadowlands.better_together_ally", shadowlands_opts.better_together_ally ) );
-  add_option( opt_timespan( "shadowlands.salvaged_fusion_amplifier_precast", shadowlands_opts.salvaged_fusion_amplifier_precast, 0_s, 20_s ) );
-  add_option( opt_float( "shadowlands.titanic_ocular_gland_worthy_chance", shadowlands_opts.titanic_ocular_gland_worthy_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "shadowlands.newfound_resolve_success_chance", shadowlands_opts.newfound_resolve_success_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "shadowlands.newfound_resolve_default_delay", shadowlands_opts.newfound_resolve_default_delay, 0_ms, timespan_t::max() ) );
-  add_option( opt_float( "shadowlands.newfound_resolve_delay_relstddev", shadowlands_opts.newfound_resolve_delay_relstddev, 0.0, std::numeric_limits<double>::max() ) );
+  add_option( opt_timespan( "shadowlands.salvaged_fusion_amplifier_precast",
+                            shadowlands_opts.salvaged_fusion_amplifier_precast, 0_s, 20_s ) );
+  add_option( opt_float( "shadowlands.titanic_ocular_gland_worthy_chance",
+                         shadowlands_opts.titanic_ocular_gland_worthy_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.newfound_resolve_success_chance",
+                         shadowlands_opts.newfound_resolve_success_chance, 0.0, 1.0 ) );
+  add_option( opt_timespan( "shadowlands.newfound_resolve_default_delay",
+                            shadowlands_opts.newfound_resolve_default_delay, 0_ms, timespan_t::max() ) );
+  add_option( opt_float( "shadowlands.newfound_resolve_delay_relstddev",
+                         shadowlands_opts.newfound_resolve_delay_relstddev, 0.0, std::numeric_limits<double>::max() ) );
   add_option( opt_bool( "shadowlands.enable_rune_words", shadowlands_opts.enable_rune_words ) );
   add_option( opt_bool( "shadowlands.enable_domination_gems", shadowlands_opts.enable_domination_gems ) );
-  add_option( opt_timespan( "shadowlands.pustule_eruption_interval", shadowlands_opts.pustule_eruption_interval, 1_s, timespan_t::max() ) );
-  add_option( opt_float( "shadowlands.shredded_soul_pickup_chance", shadowlands_opts.shredded_soul_pickup_chance, 0.0, 1.0 ) );
-  add_option( opt_float( "shadowlands.valiant_strikes_heal_rate", shadowlands_opts.valiant_strikes_heal_rate, 0.0, std::numeric_limits<double>::max() ) );
-  add_option( opt_string( "shadowlands.soleahs_secret_technique_type", shadowlands_opts.soleahs_secret_technique_type ) );
-  add_option( opt_timespan( "shadowlands.shadowed_orb_of_torment_precombat_channel", shadowlands_opts.shadowed_orb_of_torment_precombat_channel, 0_ms, 42_s ) );
-  add_option( opt_timespan( "shadowlands.reactive_defense_matrix_interval", shadowlands_opts.reactive_defense_matrix_interval, 0_ms, timespan_t::max() ) );
+  add_option( opt_timespan( "shadowlands.pustule_eruption_interval", shadowlands_opts.pustule_eruption_interval, 1_s,
+                            timespan_t::max() ) );
+  add_option(
+      opt_float( "shadowlands.shredded_soul_pickup_chance", shadowlands_opts.shredded_soul_pickup_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.valiant_strikes_heal_rate", shadowlands_opts.valiant_strikes_heal_rate, 0.0,
+                         std::numeric_limits<double>::max() ) );
+  add_option(
+      opt_string( "shadowlands.soleahs_secret_technique_type", shadowlands_opts.soleahs_secret_technique_type ) );
+  add_option( opt_timespan( "shadowlands.shadowed_orb_of_torment_precombat_channel",
+                            shadowlands_opts.shadowed_orb_of_torment_precombat_channel, 0_ms, 42_s ) );
+  add_option( opt_timespan( "shadowlands.reactive_defense_matrix_interval",
+                            shadowlands_opts.reactive_defense_matrix_interval, 0_ms, timespan_t::max() ) );
   add_option( opt_uint( "shadowlands.precombat_pustules", shadowlands_opts.precombat_pustules, 1, 9 ) );
-  add_option( opt_float( "shadowlands.field_of_blossoms_duration_multiplier", shadowlands_opts.field_of_blossoms_duration_multiplier, 0.0, 1.0 ) );
-  add_option( opt_float( "shadowlands.cruciform_veinripper_proc_rate", shadowlands_opts.cruciform_veinripper_proc_rate, 0.0, 1.0) );
-  add_option( opt_float( "shadowlands.cruciform_veinripper_in_front_rate", shadowlands_opts.cruciform_veinripper_in_front_rate, 0.0, 1.0 ) );
-  add_option( opt_timespan( "shadowlands.the_first_sigil_fleshcraft_cancel_time", shadowlands_opts.the_first_sigil_fleshcraft_cancel_time, 50_ms, timespan_t::from_seconds( 3 ) ) );
-  add_option( opt_uint( "shadowlands.earthbreakers_impact_weak_points", shadowlands_opts.earthbreakers_impact_weak_points, 0, 3 ) );
-  add_option( opt_float( "shadowlands.grim_eclipse_dot_duration_multiplier", shadowlands_opts.grim_eclipse_dot_duration_multiplier, 0.0, 1.0 ) );
-  add_option( opt_float( "shadowlands.grim_eclipse_buff_duration_multiplier", shadowlands_opts.grim_eclipse_buff_duration_multiplier, 0.0, 1.0 ) );
-  add_option( opt_bool( "shadowlands.chains_of_domination_auto_break", shadowlands_opts.chains_of_domination_auto_break ) );
+  add_option( opt_float( "shadowlands.field_of_blossoms_duration_multiplier",
+                         shadowlands_opts.field_of_blossoms_duration_multiplier, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.cruciform_veinripper_proc_rate", shadowlands_opts.cruciform_veinripper_proc_rate,
+                         0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.cruciform_veinripper_in_front_rate",
+                         shadowlands_opts.cruciform_veinripper_in_front_rate, 0.0, 1.0 ) );
+  add_option( opt_timespan( "shadowlands.the_first_sigil_fleshcraft_cancel_time",
+                            shadowlands_opts.the_first_sigil_fleshcraft_cancel_time, 50_ms,
+                            timespan_t::from_seconds( 3 ) ) );
+  add_option( opt_uint( "shadowlands.earthbreakers_impact_weak_points",
+                        shadowlands_opts.earthbreakers_impact_weak_points, 0, 3 ) );
+  add_option( opt_float( "shadowlands.grim_eclipse_dot_duration_multiplier",
+                         shadowlands_opts.grim_eclipse_dot_duration_multiplier, 0.0, 1.0 ) );
+  add_option( opt_float( "shadowlands.grim_eclipse_buff_duration_multiplier",
+                         shadowlands_opts.grim_eclipse_buff_duration_multiplier, 0.0, 1.0 ) );
+  add_option(
+      opt_bool( "shadowlands.chains_of_domination_auto_break", shadowlands_opts.chains_of_domination_auto_break ) );
   add_option( opt_float( "shadowlands.first_strike_chance", shadowlands_opts.first_strike_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "shadowlands.first_strike_period", shadowlands_opts.first_strike_period, 1_s, timespan_t::max() ) );
-  add_option( opt_float( "shadowlands.adaptive_armor_fragment_uptime", shadowlands_opts.adaptive_armor_fragment_uptime, 0.0, 0.5 ) );
-  add_option( opt_float( "shadowlands.soothing_shade_duration_multiplier", shadowlands_opts.soothing_shade_duration_multiplier, 0.0, 1.0 ) );
+  add_option(
+      opt_timespan( "shadowlands.first_strike_period", shadowlands_opts.first_strike_period, 1_s, timespan_t::max() ) );
+  add_option( opt_float( "shadowlands.adaptive_armor_fragment_uptime", shadowlands_opts.adaptive_armor_fragment_uptime,
+                         0.0, 0.5 ) );
+  add_option( opt_float( "shadowlands.soothing_shade_duration_multiplier",
+                         shadowlands_opts.soothing_shade_duration_multiplier, 0.0, 1.0 ) );
 
   // Dragonflight
-  add_option( opt_timespan( "dragonflight.darkmoon_deck_watcher_deplete", dragonflight_opts.darkmoon_deck_watcher_deplete, 0_ms, timespan_t::max() ) );
-  add_option( opt_string( "dragonflight.whispering_incarnate_icon_roles", dragonflight_opts.whispering_incarnate_icon_roles ) );
-  add_option( opt_float( "dragonflight.decoration_of_flame_miss_chance", dragonflight_opts.decoration_of_flame_miss_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "dragonflight.alltotem_of_the_master_period", dragonflight_opts.alltotem_of_the_master_period, 0_s, timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.darkmoon_deck_watcher_deplete",
+                            dragonflight_opts.darkmoon_deck_watcher_deplete, 0_ms, timespan_t::max() ) );
+  add_option(
+      opt_string( "dragonflight.whispering_incarnate_icon_roles", dragonflight_opts.whispering_incarnate_icon_roles ) );
+  add_option( opt_float( "dragonflight.decoration_of_flame_miss_chance",
+                         dragonflight_opts.decoration_of_flame_miss_chance, 0.0, 1.0 ) );
+  add_option( opt_timespan( "dragonflight.alltotem_of_the_master_period",
+                            dragonflight_opts.alltotem_of_the_master_period, 0_s, timespan_t::max() ) );
   add_option( opt_uint( "dragonflight.dragon_games_kicks", dragonflight_opts.dragon_games_kicks, 0, 3 ) );
   add_option( opt_float( "dragonflight.dragon_games_rng", dragonflight_opts.dragon_games_rng, 0.0, 1.0 ) );
-  add_option( opt_string( "dragonflight.primal_ritual_shell_blessing", dragonflight_opts.primal_ritual_shell_blessing ) );
+  add_option(
+      opt_string( "dragonflight.primal_ritual_shell_blessing", dragonflight_opts.primal_ritual_shell_blessing ) );
   add_option( opt_uint( "dragonflight.allied_wristguards_allies", dragonflight_opts.allied_wristguards_allies, 0, 3 ) );
-  add_option( opt_float( "dragonflight.allied_wristguards_ally_leave_chance", dragonflight_opts.allied_wristguards_ally_leave_chance, 0.0, 1.0 ) );
+  add_option( opt_float( "dragonflight.allied_wristguards_ally_leave_chance",
+                         dragonflight_opts.allied_wristguards_ally_leave_chance, 0.0, 1.0 ) );
   add_option( opt_float( "dragonflight.corrupting_rage_uptime", dragonflight_opts.corrupting_rage_uptime, 0.1, 1.0 ) );
-  add_option( opt_float( "dragonflight.hood_of_surging_time_chance", dragonflight_opts.hood_of_surging_time_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "dragonflight.hood_of_surging_time_period", dragonflight_opts.hood_of_surging_time_period, 1_s, timespan_t::max() ) );
-  add_option( opt_uint( "dragonflight.hood_of_surging_time_stacks", dragonflight_opts.hood_of_surging_time_stacks, 0, 5 ) );
+  add_option( opt_float( "dragonflight.hood_of_surging_time_chance", dragonflight_opts.hood_of_surging_time_chance, 0.0,
+                         1.0 ) );
+  add_option( opt_timespan( "dragonflight.hood_of_surging_time_period", dragonflight_opts.hood_of_surging_time_period,
+                            1_s, timespan_t::max() ) );
+  add_option(
+      opt_uint( "dragonflight.hood_of_surging_time_stacks", dragonflight_opts.hood_of_surging_time_stacks, 0, 5 ) );
   add_option( opt_string( "dragonflight.ruby_whelp_shell_training", dragonflight_opts.ruby_whelp_shell_training ) );
   add_option( opt_string( "dragonflight.ruby_whelp_shell_context", dragonflight_opts.ruby_whelp_shell_context ) );
-  add_option( opt_float( "dragonflight.blue_silken_lining_uptime", dragonflight_opts.blue_silken_lining_uptime, 0.0, 1.0 ) );
-  add_option( opt_timespan( "dragonflight.blue_silken_lining_update_interval", dragonflight_opts.blue_silken_lining_update_interval, 1_s, timespan_t::max() ) );
-  add_option( opt_timespan( "dragonflight.blue_silken_lining_update_interval_stddev", dragonflight_opts.blue_silken_lining_update_interval_stddev, 1_s, timespan_t::max() ) );
-  add_option( opt_bool( "dragonflight.screaming_black_dragonscale_damage", dragonflight_opts.screaming_black_dragonscale_damage ) );
-  add_option( opt_timespan( "dragonflight.adaptive_stonescales_period", dragonflight_opts.adaptive_stonescales_period, 0_s, timespan_t::max() ) );
-  add_option( opt_float( "dragonflight.undulating_sporecloak_uptime", dragonflight_opts.undulating_sporecloak_uptime, 0.0, 1.0 ) );
-  add_option( opt_timespan( "dragonflight.undulating_sporecloak_update_interval", dragonflight_opts.undulating_sporecloak_update_interval, 1_s, timespan_t::max() ) );
-  add_option( opt_timespan( "dragonflight.undulating_sporecloak_update_interval_stddev", dragonflight_opts.undulating_sporecloak_update_interval_stddev, 1_s, timespan_t::max() ) );
-  add_option( opt_float( "dragonflight.dreamtenders_charm_uptime", dragonflight_opts.dreamtenders_charm_uptime, 0.0, 1.0 ) );
-  add_option( opt_timespan( "dragonflight.dreamtenders_charm_update_interval", dragonflight_opts.dreamtenders_charm_update_interval, 1_s, timespan_t::max() ) );
-  add_option( opt_timespan( "dragonflight.dreamtenders_charm_update_interval_stddev", dragonflight_opts.dreamtenders_charm_update_interval_stddev, 1_s, timespan_t::max() ) );
+  add_option(
+      opt_float( "dragonflight.blue_silken_lining_uptime", dragonflight_opts.blue_silken_lining_uptime, 0.0, 1.0 ) );
+  add_option( opt_timespan( "dragonflight.blue_silken_lining_update_interval",
+                            dragonflight_opts.blue_silken_lining_update_interval, 1_s, timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.blue_silken_lining_update_interval_stddev",
+                            dragonflight_opts.blue_silken_lining_update_interval_stddev, 1_s, timespan_t::max() ) );
+  add_option( opt_bool( "dragonflight.screaming_black_dragonscale_damage",
+                        dragonflight_opts.screaming_black_dragonscale_damage ) );
+  add_option( opt_timespan( "dragonflight.adaptive_stonescales_period", dragonflight_opts.adaptive_stonescales_period,
+                            0_s, timespan_t::max() ) );
+  add_option( opt_float( "dragonflight.undulating_sporecloak_uptime", dragonflight_opts.undulating_sporecloak_uptime,
+                         0.0, 1.0 ) );
+  add_option( opt_timespan( "dragonflight.undulating_sporecloak_update_interval",
+                            dragonflight_opts.undulating_sporecloak_update_interval, 1_s, timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.undulating_sporecloak_update_interval_stddev",
+                            dragonflight_opts.undulating_sporecloak_update_interval_stddev, 1_s, timespan_t::max() ) );
+  add_option(
+      opt_float( "dragonflight.dreamtenders_charm_uptime", dragonflight_opts.dreamtenders_charm_uptime, 0.0, 1.0 ) );
+  add_option( opt_timespan( "dragonflight.dreamtenders_charm_update_interval",
+                            dragonflight_opts.dreamtenders_charm_update_interval, 1_s, timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.dreamtenders_charm_update_interval_stddev",
+                            dragonflight_opts.dreamtenders_charm_update_interval_stddev, 1_s, timespan_t::max() ) );
   add_option( opt_float( "dragonflight.embersoul_dire_chance", dragonflight_opts.embersoul_dire_chance, 0.0, 1.0 ) );
-  add_option( opt_timespan( "dragonflight.embersoul_dire_interval", dragonflight_opts.embersoul_dire_interval, 1_s, timespan_t::max() ) );
-  add_option( opt_timespan( "dragonflight.embersoul_dire_interval_stddev", dragonflight_opts.embersoul_dire_interval_stddev, 1_s, timespan_t::max() ) );
-  add_option( opt_timespan( "dragonflight.gift_of_ursine_vengeance_period", dragonflight_opts.gift_of_ursine_vengeance_period, 3_s, timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.embersoul_dire_interval", dragonflight_opts.embersoul_dire_interval, 1_s,
+                            timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.embersoul_dire_interval_stddev",
+                            dragonflight_opts.embersoul_dire_interval_stddev, 1_s, timespan_t::max() ) );
+  add_option( opt_timespan( "dragonflight.gift_of_ursine_vengeance_period",
+                            dragonflight_opts.gift_of_ursine_vengeance_period, 3_s, timespan_t::max() ) );
 
   // The War Within
 }
@@ -4150,9 +4243,12 @@ bool sim_t::parse_option( const std::string& name, const std::string& value )
       switch ( ret )
       {
         case opts::parse_status::DEPRECATED:
-        case opts::parse_status::FAILURE:    return false;
-        case opts::parse_status::OK:         return true;
-        default:                             break;
+        case opts::parse_status::FAILURE:
+          return false;
+        case opts::parse_status::OK:
+          return true;
+        default:
+          break;
       }
     }
     catch ( const std::exception& )
@@ -4200,7 +4296,7 @@ void sim_t::setup( sim_control_t* c )
     if ( !parse_option( option.name, option.value ) )
     {
       throw sc_invalid_sim_argument(
-        fmt::format( "Unknown sim option '{}' with value '{}'.", option.name, option.value ) );
+          fmt::format( "Unknown sim option '{}' with value '{}'.", option.name, option.value ) );
     }
   }
 
@@ -4224,14 +4320,14 @@ void sim_t::setup( sim_control_t* c )
     if ( !p )
     {
       throw sc_invalid_sim_argument(
-        fmt::format( "Player '{}' not found for sim option '{}' with value '{}'.", o.scope, o.name, o.value ) );
+          fmt::format( "Player '{}' not found for sim option '{}' with value '{}'.", o.scope, o.name, o.value ) );
     }
 
     auto ret = opts::parse( this, p->options, o.name, o.value );
     if ( ret == opts::parse_status::FAILURE )
     {
       throw sc_invalid_sim_argument(
-        fmt::format( "Invalid sim option '{}' with value '{}' for player '{}'.", o.name, o.value, p->name() ) );
+          fmt::format( "Invalid sim option '{}' with value '{}' for player '{}'.", o.name, o.value, p->name() ) );
     }
   }
 
@@ -4243,7 +4339,7 @@ void sim_t::setup( sim_control_t* c )
   if ( parent || profileset_enabled )
   {
     debug = false;
-    log = 0;
+    log   = 0;
   }
   else if ( !output_file_str.empty() )
   {
@@ -4252,7 +4348,7 @@ void sim_t::setup( sim_control_t* c )
     if ( o->is_open() )
     {
       out_debug = o;
-      out_log = o;
+      out_log   = o;
     }
     else
     {
@@ -4273,7 +4369,7 @@ void sim_t::setup( sim_control_t* c )
 
   if ( log )
   {
-    if ( ! debug_each )
+    if ( !debug_each )
       iterations = 1;
 
     threads = 1;
@@ -4281,7 +4377,7 @@ void sim_t::setup( sim_control_t* c )
 
   if ( iterations <= 0 )
   {
-    iterations = 1000000; // limited by relative standard error
+    iterations = 1000000;  // limited by relative standard error
 
     if ( target_error <= 0 )
     {
@@ -4330,7 +4426,7 @@ void sim_t::setup( sim_control_t* c )
 
 sim_progress_t sim_t::progress( std::string* detailed, int index )
 {
-  auto total_progress = work_queue -> progress( index );
+  auto total_progress = work_queue->progress( index );
 
   // If strict work queue is used with target error, estimate that total iterations will be roughly
   // the total iterations of the main thread, multiplied by the total number of threads.
@@ -4347,7 +4443,7 @@ sim_progress_t sim_t::progress( std::string* detailed, int index )
     {
       if ( child )
       {
-        auto progress = child -> work_queue -> progress( index );
+        auto progress = child->work_queue->progress( index );
         total_progress.current_iterations += progress.current_iterations;
         // If no target error, include total iterations from the child threads as well
         if ( target_error <= 0 )
@@ -4371,20 +4467,17 @@ double sim_t::progress( std::string& phase, std::string* detailed, int index )
     return 1.0;
   }
 
-  if ( plot -> num_plot_stats > 0 &&
-       plot -> remaining_plot_stats > 0 )
+  if ( plot->num_plot_stats > 0 && plot->remaining_plot_stats > 0 )
   {
-    return plot -> progress( phase, detailed );
+    return plot->progress( phase, detailed );
   }
-  else if ( scaling -> calculate_scale_factors &&
-            scaling -> num_scaling_stats > 0 &&
-            scaling -> remaining_scaling_stats > 0 )
+  else if ( scaling->calculate_scale_factors && scaling->num_scaling_stats > 0 && scaling->remaining_scaling_stats > 0 )
   {
-    return scaling -> progress( phase, detailed );
+    return scaling->progress( phase, detailed );
   }
-  else if ( reforge_plot -> num_stat_combos > 0 )
+  else if ( reforge_plot->num_stat_combos > 0 )
   {
-    return reforge_plot -> progress( phase, detailed );
+    return reforge_plot->progress( phase, detailed );
   }
   else if ( current_iteration >= 0 )
   {
@@ -4394,7 +4487,7 @@ double sim_t::progress( std::string& phase, std::string* detailed, int index )
   else if ( current_slot >= 0 )
   {
     phase = current_name;
-    return current_slot / ( double ) SLOT_MAX;
+    return current_slot / (double)SLOT_MAX;
   }
 
   return 0.0;
@@ -4404,8 +4497,8 @@ void sim_t::detailed_progress( std::string* detail, int current_iterations, int 
 {
   if ( detail )
   {
-    detail -> clear();
-    *detail = fmt::format("Iteration {:d}/{:d}", current_iterations, total_iterations );
+    detail->clear();
+    *detail = fmt::format( "Iteration {:d}/{:d}", current_iterations, total_iterations );
   }
 }
 
@@ -4440,10 +4533,10 @@ void sim_t::add_chart_data( const highchart::chart_t& chart )
 
 void sim_t::print_spell_query()
 {
-  if ( ! spell_query_xml_output_file_str.empty() )
+  if ( !spell_query_xml_output_file_str.empty() )
   {
     io::cfile file( spell_query_xml_output_file_str, "w" );
-    if ( ! file )
+    if ( !file )
     {
       fmt::print( stderr, "Unable to open spell query xml output file '{}', using stdout instead\n",
                   spell_query_xml_output_file_str );
@@ -4462,18 +4555,19 @@ void sim_t::print_spell_query()
 /* Build a divisor timeline vector appropriate to a given timeline
  * bucket size, from given simulation length data.
  */
-std::vector<double> sc_timeline_t::build_divisor_timeline( const extended_sample_data_t& simulation_length, double bin_size )
+std::vector<double> sc_timeline_t::build_divisor_timeline( const extended_sample_data_t& simulation_length,
+                                                           double bin_size )
 {
   std::vector<double> divisor_timeline;
   // divisor_timeline is necessary because not all iterations go the same length of time
-  size_t max_buckets = static_cast<size_t>( floor( simulation_length.max() / bin_size ) + 1);
+  size_t max_buckets = static_cast<size_t>( floor( simulation_length.max() / bin_size ) + 1 );
   divisor_timeline.assign( max_buckets, 0.0 );
 
   size_t num_timelines = simulation_length.data().size();
   for ( size_t i = 0; i < num_timelines; i++ )
   {
     size_t last = static_cast<size_t>( floor( simulation_length.data()[ i ] / bin_size ) );
-    assert( last < divisor_timeline.size() ); // We created it with max length
+    assert( last < divisor_timeline.size() );  // We created it with max length
 
     static const bool use_old_behaviour = true;
     if ( use_old_behaviour )
@@ -4552,13 +4646,13 @@ void sim_t::enable_debug_seed()
       return;
     }
 
-    std::shared_ptr<io::ofstream> o(new io::ofstream());
+    std::shared_ptr<io::ofstream> o( new io::ofstream() );
     std::string fname = output_file_str + "." + util::to_string( seed );
-    o -> open( fname );
-    if ( o -> is_open() )
+    o->open( fname );
+    if ( o->is_open() )
     {
       out_debug = o;
-      out_log = o;
+      out_log   = o;
 
       fmt::print( "------ Iteration #{} (seed={}) ------", current_iteration, seed );
       std::fflush( stdout );
@@ -4570,7 +4664,7 @@ void sim_t::enable_debug_seed()
     }
 
     debug = true;
-    log = 1;
+    log   = 1;
   }
 }
 
@@ -4596,13 +4690,14 @@ void sim_t::disable_debug_seed()
   if ( enabled )
   {
     debug = false;
-    log = 0;
+    log   = 0;
   }
 }
 
 double sim_t::averaged_range( double min, double max )
 {
-  if ( average_range ) return ( min + max ) / 2.0;
+  if ( average_range )
+    return ( min + max ) / 2.0;
   return rng().range( min, max );
 }
 
@@ -4621,33 +4716,33 @@ void sim_t::activate_actors()
 
   // Normal sim mode activates all actors .. and this method is only called once at the beginning of
   // the simulation run.
-  if ( ! single_actor_batch )
+  if ( !single_actor_batch )
   {
-    range::for_each( player_list, []( player_t* p ) { p -> activate(); } );
+    range::for_each( player_list, []( player_t* p ) { p->activate(); } );
   }
   // Single-actor batch mode activates the current active actor
   else
   {
-    range::for_each( target_list, []( player_t* t ) { t -> actor_changed(); } );
+    range::for_each( target_list, []( player_t* t ) { t->actor_changed(); } );
 
     // Deactivate old actor
     if ( current_index > 0 )
     {
-      player_no_pet_list[ current_index - 1 ] -> deactivate();
+      player_no_pet_list[ current_index - 1 ]->deactivate();
     }
 
     // Activate new actor
-    player_no_pet_list[ current_index ] -> activate();
-    if ( ! profileset_enabled )
+    player_no_pet_list[ current_index ]->activate();
+    if ( !profileset_enabled )
     {
-      progress_bar.set_phase( player_no_pet_list[ current_index ] -> name_str );
+      progress_bar.set_phase( player_no_pet_list[ current_index ]->name_str );
     }
   }
 
   if ( overrides.hunters_mark )
     target_non_sleeping_list.register_callback( [ this ]( player_t* ) {
       player_t* new_mark = nullptr;
-      for (size_t i = 0; i < target_non_sleeping_list.size(); i++)
+      for ( size_t i = 0; i < target_non_sleeping_list.size(); i++ )
       {
         player_t* t = target_non_sleeping_list[ i ];
         if ( !t->debuffs.hunters_mark )
@@ -4665,13 +4760,13 @@ void sim_t::activate_actors()
   progress_bar.progress();
 
   current_iteration = -1;
-  analyze_number = 0;
+  analyze_number    = 0;
 }
 
 bool sim_t::has_raid_event( util::string_view type ) const
 {
   return range::any_of( raid_events, [ &type ]( const std::unique_ptr<raid_event_t>& event ) {
-      return util::str_compare_ci( type, event -> type );
+    return util::str_compare_ci( type, event->type );
   } );
 }
 
@@ -4685,13 +4780,13 @@ bool sim_t::requires_cleanup() const
   }
 
   // .. if we are simulating a scale factor calculation
-  if ( scaling -> scale_stat != STAT_NONE )
+  if ( scaling->scale_stat != STAT_NONE )
   {
     return true;
   }
 
   // .. if we are simulating a reforge plot
-  if ( ! reforge_plot -> reforge_plot_stat_str.empty() )
+  if ( !reforge_plot->reforge_plot_stat_str.empty() )
   {
     return true;
   }
@@ -4702,11 +4797,11 @@ bool sim_t::requires_cleanup() const
 
 void sim_t::heartbeat_event_callback()
 {
-  for( size_t i = 0; i < heartbeat_event_callback_function.size(); ++i )
+  for ( size_t i = 0; i < heartbeat_event_callback_function.size(); ++i )
     heartbeat_event_callback_function[ i ]( this );
 }
 
-void sim_t::register_heartbeat_event_callback(std::function<void(sim_t*)> fn)
+void sim_t::register_heartbeat_event_callback( std::function<void( sim_t* )> fn )
 {
   heartbeat_event_callback_function.emplace_back( std::move( fn ) );
 }

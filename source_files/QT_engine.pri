@@ -199,6 +199,7 @@ HEADERS += engine/util/timespan.hpp
 HEADERS += engine/util/util.hpp
 HEADERS += engine/util/vector_with_callback.hpp
 HEADERS += engine/util/xml.hpp
+HEADERS += engine/rl/rl_interface.hpp
 
 SOURCES += engine/action/absorb.cpp
 SOURCES += engine/action/action.cpp
@@ -368,6 +369,7 @@ SOURCES += engine/sim/scale_factor_control.cpp
 SOURCES += engine/sim/sim.cpp
 SOURCES += engine/sim/sim_ostream.cpp
 SOURCES += engine/sim/uptime_benefit.cpp
+SOURCES += engine/rl/rl_interface.cpp
 SOURCES += engine/util/cache.cpp
 SOURCES += engine/util/chrono.cpp
 SOURCES += engine/util/concurrency.cpp

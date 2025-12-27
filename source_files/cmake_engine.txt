@@ -335,6 +335,8 @@ player/unique_gear_helper.cpp
 player/unique_gear_legion.cpp
 player/unique_gear_shadowlands.cpp
 player/unique_gear_thewarwithin.cpp
+rl/rl_interface.hpp
+rl/rl_interface.cpp
 report/charts.cpp
 report/color.cpp
 report/decorators.cpp

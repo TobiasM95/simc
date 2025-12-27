@@ -6,11 +6,12 @@
 #pragma once
 
 #include "config.hpp"
+
 #include "event_manager.hpp"
 #include "player/gear_stats.hpp"
 #include "progress_bar.hpp"
-#include "sim_ostream.hpp"
 #include "sim/option.hpp"
+#include "sim_ostream.hpp"
 #include "util/concurrency.hpp"
 #include "util/rng.hpp"
 #include "util/sample_data.hpp"
@@ -26,8 +27,9 @@ struct cooldown_t;
 class dbc_t;
 class dbc_override_t;
 struct expr_t;
-namespace highchart {
-    struct chart_t;
+namespace highchart
+{
+struct chart_t;
 }
 struct iteration_data_entry_t;
 struct option_t;
@@ -45,8 +47,9 @@ namespace report::json
 class report_configuration_t;
 }
 
-namespace profileset{
-  class profilesets_t;
+namespace profileset
+{
+class profilesets_t;
 }
 
 struct sim_progress_t
@@ -54,7 +57,9 @@ struct sim_progress_t
   int current_iterations;
   int total_iterations;
   double pct() const
-  { return std::min( 1.0, current_iterations / static_cast<double>(total_iterations) ); }
+  {
+    return std::min( 1.0, current_iterations / static_cast<double>( total_iterations ) );
+  }
 };
 
 /// Simulation engine
@@ -83,7 +88,7 @@ struct sim_t : private sc_thread_t
   bool fixed_time;
   bool save_profiles;
   bool save_profile_with_actions;  // When saving full profiles, include actions or not
-  bool save_full_profile;  // save the full profile instead of only active save_e flags
+  bool save_full_profile;          // save the full profile instead of only active save_e flags
   bool default_actions;
 
   // Iteration Controls
@@ -97,9 +102,9 @@ struct sim_t : private sc_thread_t
   int analyze_error_interval, analyze_number;
 
   sim_control_t* control;
-  sim_t*      parent;
-  player_t*   target;
-  player_t*   heal_target;
+  sim_t* parent;
+  player_t* target;
+  player_t* heal_target;
   vector_with_callback<player_t*> target_list;
   vector_with_callback<player_t*> target_non_sleeping_list;
   vector_with_callback<player_t*> player_list;
@@ -107,56 +112,55 @@ struct sim_t : private sc_thread_t
   vector_with_callback<player_t*> player_non_sleeping_list;
   vector_with_callback<player_t*> healing_no_pet_list;
   vector_with_callback<player_t*> healing_pet_list;
-  player_t*   active_player;
-  size_t      current_index; // Current active player
-  int         num_players;
-  int         num_enemies;
-  int         num_tanks;
-  int         enemy_targets;
-  int         healing; // Creates healing targets. Useful for ferals, I guess.
+  player_t* active_player;
+  size_t current_index;  // Current active player
+  int num_players;
+  int num_enemies;
+  int num_tanks;
+  int enemy_targets;
+  int healing;  // Creates healing targets. Useful for ferals, I guess.
   int global_spawn_index;
-  int         max_player_level;
+  int max_player_level;
   rng::truncated_gauss_t queue_lag, gcd_lag, channel_lag;
-  timespan_t  queue_gcd_reduction;
-  timespan_t  default_cooldown_tolerance;
-  bool         strict_gcd_queue;
-  double      confidence, confidence_estimator;
+  timespan_t queue_gcd_reduction;
+  timespan_t default_cooldown_tolerance;
+  bool strict_gcd_queue;
+  double confidence, confidence_estimator;
   // Latency
   rng::truncated_gauss_t world_lag;
-  double      travel_variance, default_skill;
-  timespan_t  reaction_time, regen_periodicity;
-  timespan_t  ignite_sampling_delta;
-  int         optimize_expressions;
-  int         optimize_expressions_rounds;
-  int         current_slot;
-  int         optimal_raid, log, debug_each;
+  double travel_variance, default_skill;
+  timespan_t reaction_time, regen_periodicity;
+  timespan_t ignite_sampling_delta;
+  int optimize_expressions;
+  int optimize_expressions_rounds;
+  int current_slot;
+  int optimal_raid, log, debug_each;
   std::vector<uint64_t> debug_seed;
-  stat_e      normalized_stat;
+  stat_e normalized_stat;
   std::string current_name, default_region_str, default_server_str, save_prefix_str, save_suffix_str;
-  bool         save_talent_str;
-  auto_dispose< std::vector<player_t*> > actor_list;
+  bool save_talent_str;
+  auto_dispose<std::vector<player_t*>> actor_list;
   std::string main_target_str;
-  int         stat_cache;
-  int         max_aoe_enemies;
-  bool        requires_regen_event;
-  bool        single_actor_batch;
-  bool        allow_experimental_specializations;
-  bool        enable_all_talents;
-  bool        enable_all_sets;
-  bool        enable_all_item_effects;
-  int         progressbar_type;
-  int         armory_retries;
+  int stat_cache;
+  int max_aoe_enemies;
+  bool requires_regen_event;
+  bool single_actor_batch;
+  bool allow_experimental_specializations;
+  bool enable_all_talents;
+  bool enable_all_sets;
+  bool enable_all_item_effects;
+  int progressbar_type;
+  int armory_retries;
   std::unordered_map<std::string, std::string> item_slot_overrides;
 
   // Target options
-  double      enemy_death_pct;
-  int         rel_target_level, target_level;
+  double enemy_death_pct;
+  int rel_target_level, target_level;
   std::string target_race;
-  int         target_adds;
+  int target_adds;
   std::string sim_progress_base_str, sim_progress_phase_str;
-  int         desired_targets; // desired number of targets
-  int         desired_tank_targets; // desired number of tank target dummy npcs
-
+  int desired_targets;       // desired number of targets
+  int desired_tank_targets;  // desired number of tank target dummy npcs
 
   // Data access
   std::unique_ptr<dbc_t> dbc;
@@ -166,21 +170,21 @@ struct sim_t : private sc_thread_t
   gear_stats_t enchant;
 
   int timewalk;
-  int scale_to_itemlevel; //itemlevel to scale to. if -1, we don't scale down
-  bool dungeon_route_smart_targeting;            // sets whether the list of mobs will be sorted by their hp
-  bool challenge_mode; // if active, players will get scaled down to 620 and set bonuses are deactivated
-  bool scale_itemlevel_down_only; // Items below the value of scale_to_itemlevel will not be scaled up.
-  bool disable_set_bonuses; // Disables all set bonuses.
+  int scale_to_itemlevel;              // itemlevel to scale to. if -1, we don't scale down
+  bool dungeon_route_smart_targeting;  // sets whether the list of mobs will be sorted by their hp
+  bool challenge_mode;                 // if active, players will get scaled down to 620 and set bonuses are deactivated
+  bool scale_itemlevel_down_only;      // Items below the value of scale_to_itemlevel will not be scaled up.
+  bool disable_set_bonuses;            // Disables all set bonuses.
   bool enable_taunts;
-  bool use_item_verification;  // Disable use-item action verification in the simulator
-  std::string disable_2_set; // Disables all 2 set bonuses for the tier that this is set as
-  std::string disable_4_set; // Disables all 4 set bonuses for the tier that this is set as
-  std::string enable_2_set;// Enables all 2 set bonuses for the tier that this is set as
-  std::string enable_4_set; // Enables all 4 set bonuses for the tier that this is set as
-  const spell_data_t* pvp_rules; // Hidden aura that contains the PvP crit damage reduction
-  bool pvp_mode; // Enables PvP mode - reduces crit damage, adjusts PvP gear iLvl
-  bool auto_attacks_always_land; /// Allow Auto Attacks (white attacks) to always hit the enemy
-  bool log_spell_id; // Add spell data ids to log/debug output where available. (actions, buffs)
+  bool use_item_verification;     // Disable use-item action verification in the simulator
+  std::string disable_2_set;      // Disables all 2 set bonuses for the tier that this is set as
+  std::string disable_4_set;      // Disables all 4 set bonuses for the tier that this is set as
+  std::string enable_2_set;       // Enables all 2 set bonuses for the tier that this is set as
+  std::string enable_4_set;       // Enables all 4 set bonuses for the tier that this is set as
+  const spell_data_t* pvp_rules;  // Hidden aura that contains the PvP crit damage reduction
+  bool pvp_mode;                  // Enables PvP mode - reduces crit damage, adjusts PvP gear iLvl
+  bool auto_attacks_always_land;  /// Allow Auto Attacks (white attacks) to always hit the enemy
+  bool log_spell_id;              // Add spell data ids to log/debug output where available. (actions, buffs)
 
   // Actor tracking
   int active_enemies;
@@ -221,13 +225,13 @@ struct sim_t : private sc_thread_t
     int bleeding;
 
     // Misc stuff needs resolving
-    int    bloodlust;
+    int bloodlust;
     std::vector<uint64_t> target_health;
   } overrides;
 
   struct auras_t
   {
-    buff_t* fallback; // generic global fallback buff
+    buff_t* fallback;  // generic global fallback buff
     buff_t* arcane_intellect;
     buff_t* battle_shout;
     buff_t* mark_of_the_wild;
@@ -239,81 +243,82 @@ struct sim_t : private sc_thread_t
   struct legion_opt_t
   {
     // Legion
-    int                 infernal_cinders_users = 1;
-    int                 engine_of_eradication_orbs = 4;
-    int                 void_stalkers_contract_targets = -1;
-    double              specter_of_betrayal_overlap = 1.0;
+    int infernal_cinders_users         = 1;
+    int engine_of_eradication_orbs     = 4;
+    int void_stalkers_contract_targets = -1;
+    double specter_of_betrayal_overlap = 1.0;
     std::vector<double> cradle_of_anguish_resets;
   } legion_opts;
 
   struct bfa_opt_t
   {
     /// Chance to spawn the rare droplet
-    double              secrets_of_the_deep_chance = 0.1; // TODO: Guessed, needs validation
+    double secrets_of_the_deep_chance = 0.1;  // TODO: Guessed, needs validation
     /// Chance that the player collects the droplet, defaults to always
-    double              secrets_of_the_deep_collect_chance = 1.0;
+    double secrets_of_the_deep_collect_chance = 1.0;
     /// Gutripper base RPPM when target is above 30%
-    double              gutripper_default_rppm = 2.0;
+    double gutripper_default_rppm = 2.0;
     /// Chance to pick up visage spawned by Seductive Power
-    double              seductive_power_pickup_chance = 1.0;
+    double seductive_power_pickup_chance = 1.0;
     /// Treacherous Covenant update period.
-    timespan_t          covenant_period = 1.0_s;
+    timespan_t covenant_period = 1.0_s;
     /// Chance to gain the buff on each Treacherous Covenant update.
-    double              covenant_chance = 1.0;
+    double covenant_chance = 1.0;
     /// Chance to gain a stack of Incandescent Sliver each time it ticks.
-    double              incandescent_sliver_chance = 1.0;
+    double incandescent_sliver_chance = 1.0;
     /// Fight or Flight proc attempt period
-    timespan_t          fight_or_flight_period = 1.0_s;
+    timespan_t fight_or_flight_period = 1.0_s;
     /// Chance to gain the buff on each Fight or Flight attempt
-    double              fight_or_flight_chance = 0.0;
+    double fight_or_flight_chance = 0.0;
     /// Chance of being silenced by Harbinger's Inscrutable Will projectile
-    double              harbingers_inscrutable_will_silence_chance = 0.0;
+    double harbingers_inscrutable_will_silence_chance = 0.0;
     /// Chance avoiding Harbinger's Inscrutable Will projectile by moving
-    double              harbingers_inscrutable_will_move_chance = 1.0;
+    double harbingers_inscrutable_will_move_chance = 1.0;
     /// Chance player is above 60% HP for Leggings of the Aberrant Tidesage damage proc
-    double              aberrant_tidesage_damage_chance = 1.0;
+    double aberrant_tidesage_damage_chance = 1.0;
     /// Chance player is above 90% HP for Fa'thuul's Floodguards damage proc
-    double              fathuuls_floodguards_damage_chance = 1.0;
+    double fathuuls_floodguards_damage_chance = 1.0;
     /// Chance player is above 90% HP for Grips of Forgotten Sanity damage proc
-    double              grips_of_forsaken_sanity_damage_chance = 1.0;
+    double grips_of_forsaken_sanity_damage_chance = 1.0;
     /// Chance player takes damage and loses Untouchable from Stormglide Steps
-    double              stormglide_steps_take_damage_chance = 0.0;
-    /// Duration of the Lurker's Insidious Gift buff, the player can cancel it early to avoid unnecessary damage. 0 = full duration
-    timespan_t          lurkers_insidious_gift_duration = 0_ms;
+    double stormglide_steps_take_damage_chance = 0.0;
+    /// Duration of the Lurker's Insidious Gift buff, the player can cancel it early to avoid unnecessary damage. 0 =
+    /// full duration
+    timespan_t lurkers_insidious_gift_duration = 0_ms;
     /// Expected duration (in seconds) of shield from Abyssal Speaker's Gauntlets. 0 = full duration
-    timespan_t          abyssal_speakers_gauntlets_shield_duration = 0_ms;
+    timespan_t abyssal_speakers_gauntlets_shield_duration = 0_ms;
     /// Expected duration of the absorb provided by Trident of Deep Ocean. 0 = full duration
-    timespan_t          trident_of_deep_ocean_duration = 0_ms;
+    timespan_t trident_of_deep_ocean_duration = 0_ms;
     /// Chance that the player has a higher health percentage than the target for Legplates of Unbound Anguish proc
-    double              legplates_of_unbound_anguish_chance = 1.0;
+    double legplates_of_unbound_anguish_chance = 1.0;
     /// Period to check for if an ally dies with Loyal to the End
-    timespan_t          loyal_to_the_end_ally_death_timer = 60_s;
+    timespan_t loyal_to_the_end_ally_death_timer = 60_s;
     /// Chance on every check to see if an ally dies with Loyal to the End
-    double              loyal_to_the_end_ally_death_chance = 0.0;
+    double loyal_to_the_end_ally_death_chance = 0.0;
     /// Number of allies with the Loyal to the End azerite trait, default = 4 (max)
-    int                 loyal_to_the_end_allies = 0;
+    int loyal_to_the_end_allies = 0;
     /// Number of allies also using the Worldvein Resonance minor
-    int                 worldvein_allies = 0;
+    int worldvein_allies = 0;
     /// Chance to proc Reality Shift (normally triggers on moving specific distance)
-    double              ripple_in_space_proc_chance = 0.0;
+    double ripple_in_space_proc_chance = 0.0;
     /// Chance to be in range to hit with Blood of the Enemy major power (12 yd PBAoE)
-    double              blood_of_the_enemy_in_range = 1.0;
+    double blood_of_the_enemy_in_range = 1.0;
     /// Period to check for if Undulating Tides gets locked out
-    timespan_t          undulating_tides_lockout_timer = 60_s;
+    timespan_t undulating_tides_lockout_timer = 60_s;
     /// Chance on every check to see if Undulating Tides gets locked out
-    double              undulating_tides_lockout_chance = 0.0;
+    double undulating_tides_lockout_chance = 0.0;
     /// Base RPPM for Leviathan's Lure
-    double              leviathans_lure_base_rppm = 0.75;
+    double leviathans_lure_base_rppm = 0.75;
     /// Chance to catch returning wave of Aquipotent Nautilus
-    double              aquipotent_nautilus_catch_chance = 1.0;
+    double aquipotent_nautilus_catch_chance = 1.0;
     /// Chance of having to interrupt casting by moving to void tear from Za'qul's Portal Key
-    double              zaquls_portal_key_move_chance = 0.0;
+    double zaquls_portal_key_move_chance = 0.0;
     /// Unleash stacked potency from Anu-Azshara, Staff of the Eternal after X seconds
-    timespan_t          anuazshara_unleash_time = 0_ms;
+    timespan_t anuazshara_unleash_time = 0_ms;
     /// Storm of the Eternal haste and crit stat split ratio.
-    double              storm_of_the_eternal_ratio = 0.05;
+    double storm_of_the_eternal_ratio = 0.05;
     /// How long before combat to start channeling Azshara's Font of Power
-    timespan_t          font_of_power_precombat_channel = 0_ms;
+    timespan_t font_of_power_precombat_channel = 0_ms;
     /// Average duration of buff in percentage
     double voidtwisted_titanshard_percent_duration = 0.5;
     /// Period between checking if surging vitality can proc
@@ -327,33 +332,33 @@ struct sim_t : private sc_thread_t
     /// Percentage of Whispered Truths reductions to be applied to offensive spells.
     double whispered_truths_offensive_chance = 0.75;
     /// Initial stacks for Seductive Power buff
-    int                 initial_seductive_power_stacks = 0;
+    int initial_seductive_power_stacks = 0;
     /// Number of allies affected by Jes' Howler buff
-    unsigned            jes_howler_allies = 4;
+    unsigned jes_howler_allies = 4;
     /// Initial stacks for Archive of the Titans
-    int                 initial_archive_of_the_titans_stacks = 0;
+    int initial_archive_of_the_titans_stacks = 0;
     /// Hps done while using the Azerite Trait Arcane Heart
-    unsigned            arcane_heart_hps = 0;
+    unsigned arcane_heart_hps = 0;
     /// Prepull spell cast count to assume.
-    int                 subroutine_recalibration_precombat_stacks = 0;
+    int subroutine_recalibration_precombat_stacks = 0;
     /// Additional spell cast count to assume each buff cycle.
-    int                 subroutine_recalibration_dummy_casts = 0;
+    int subroutine_recalibration_dummy_casts = 0;
     /// Number of Reorigination array stats on the actors in the sim
-    int                 reorigination_array_stacks = 0;
+    int reorigination_array_stacks = 0;
     /// Allow Reorigination Array to ignore scale factor stat changes (default false)
-    bool                reorigination_array_ignore_scale_factors = false;
+    bool reorigination_array_ignore_scale_factors = false;
     /// Randomize Variable Intensity Gigavolt Oscillating Reactor start-of-combat oscillation
-    bool                randomize_oscillation = true;
+    bool randomize_oscillation = true;
     /// Automatically use Oscillating Overload on max stack, true = yes if no use_item, 0 = no
-    bool                auto_oscillating_overload = true;
+    bool auto_oscillating_overload = true;
     /// Is the actor in Zuldazar? Relevant for one of the set bonuses.
-    bool                zuldazar = false;
+    bool zuldazar = false;
     /// Whether the player is in Ny'alotha or not.
     bool nyalotha = true;
     /// Whether the player is in Nazjatar/Eternal Palace for various effects
-    bool                nazjatar = true;
+    bool nazjatar = true;
     /// Whether the Shiver Venom Crossbow/Lance should assume the target has the Shiver Venom debuff
-    bool                shiver_venom = false;
+    bool shiver_venom = false;
   } bfa_opts;
 
   struct shadowlands_opt_t
@@ -417,7 +422,7 @@ struct sim_t : private sc_thread_t
     /// Sets the default delay that the player waits before facing their Doubt.
     /// This is disabled if the APL creates the "newfound_resolve" action.
     timespan_t newfound_resolve_default_delay = 4_s;
-    double newfound_resolve_delay_relstddev = 0.2;
+    double newfound_resolve_delay_relstddev   = 0.2;
     /// Seconds between damage/healing triggers for the Pustule Eruption soulbind, has a minimum 1s ICD
     timespan_t pustule_eruption_interval = 1_s;
     /// Chance that the player will pickup Shredded Soul orb left by Ebonsoul Vise
@@ -435,7 +440,8 @@ struct sim_t : private sc_thread_t
     double field_of_blossoms_duration_multiplier = 1.0;
     /// Modifier for Cruciform Veinripper to control uptime. When set to 0, proc rate is not affected.
     double cruciform_veinripper_proc_rate = 0.0;
-    /// Modifier for Cruciform Veinripper to control uptime for tanks. When set to 0, proc rate is not affected unless position=front, in which case 0.4 is used.
+    /// Modifier for Cruciform Veinripper to control uptime for tanks. When set to 0, proc rate is not affected unless
+    /// position=front, in which case 0.4 is used.
     double cruciform_veinripper_in_front_rate = 0.0;
     /// How many pustules to generate during pre-combat, as events before the pull will normally remove a few
     unsigned int precombat_pustules = 9;
@@ -447,8 +453,8 @@ struct sim_t : private sc_thread_t
     bool disable_iqd_execute = false;
     // Better Together Override
     // Defaults active
-    bool better_together_ally = true;
-    bool enable_rune_words = false;
+    bool better_together_ally   = true;
+    bool enable_rune_words      = false;
     bool enable_domination_gems = false;
     // fleshcraft cancel delay from the_first_sigil
     timespan_t the_first_sigil_fleshcraft_cancel_time = 50_ms;
@@ -456,7 +462,8 @@ struct sim_t : private sc_thread_t
     unsigned int earthbreakers_impact_weak_points = 3;
     // Grim Eclipse Dot Duration override
     double grim_eclipse_dot_duration_multiplier = 1.0;
-    // Percentage of default duration for Grim Eclipse haste buff. Set to 90% by default assuming about 1s of movement to get to the Event Horizon
+    // Percentage of default duration for Grim Eclipse haste buff. Set to 90% by default assuming about 1s of movement
+    // to get to the Event Horizon
     double grim_eclipse_buff_duration_multiplier = 0.9;
     // Automatically break the Chains of Domination trinket at maximum
     bool chains_of_domination_auto_break = true;
@@ -510,7 +517,8 @@ struct sim_t : private sc_thread_t
     timespan_t blue_silken_lining_update_interval_stddev = 2.5_s;
     // Enable or Disable Seething Black Dragonscale's damage
     bool screaming_black_dragonscale_damage = false;
-    // Period in which to try to trigger adapative Stonescales. Based on spell data, does not trigger on periodic damage.
+    // Period in which to try to trigger adapative Stonescales. Based on spell data, does not trigger on periodic
+    // damage.
     timespan_t adaptive_stonescales_period = 3_s;
     // Uptime of the vers buff of Undulating Sporecloak (>70% HP)
     double undulating_sporecloak_uptime = 0.9;
@@ -558,7 +566,7 @@ struct sim_t : private sc_thread_t
   chrono::wall_clock::duration elapsed_time;
   std::vector<size_t> work_per_thread;
   size_t work_done;
-  double     iteration_dmg, priority_iteration_dmg,  iteration_heal, iteration_absorb;
+  double iteration_dmg, priority_iteration_dmg, iteration_heal, iteration_absorb;
   simple_sample_data_t total_dmg, raid_hps, total_heal, total_absorb, raid_aps;
   extended_sample_data_t raid_dps, simulation_length;
   chrono::wall_clock::duration merge_time, init_time, analyze_time;
@@ -566,11 +574,11 @@ struct sim_t : private sc_thread_t
   // replayability
   std::vector<iteration_data_entry_t> iteration_data, low_iteration_data, high_iteration_data;
   // Report percent (how many% of lowest/highest iterations reported, default 2.5%)
-  double     report_iteration_data;
+  double report_iteration_data;
   // Minimum number of low/high iterations reported (default 5 of each)
-  int        min_report_iteration_data;
-  int        report_progress;
-  int        bloodlust_percent;
+  int min_report_iteration_data;
+  int report_progress;
+  int bloodlust_percent;
   timespan_t bloodlust_time;
   std::string reference_player_str;
   std::vector<player_t*> players_by_dps;
@@ -583,7 +591,7 @@ struct sim_t : private sc_thread_t
   std::vector<player_t*> players_by_variance;
   std::vector<player_t*> targets_by_name;
   std::vector<std::string> id_dictionary;
-  std::map<double, std::vector<double> > divisor_timeline_cache;
+  std::map<double, std::vector<double>> divisor_timeline_cache;
   std::vector<report::json::report_configuration_t> json_reports;
   std::string output_file_str, html_file_str, json_file_str;
   std::string reforge_plot_output_file_str;
@@ -622,10 +630,17 @@ struct sim_t : private sc_thread_t
   double scaling_normalized;
   bool merge_enemy_priority_dmg;
 
+  // Experimental: route action selection through rl::policy_fn_t.
+  bool rl_enable;
+
+  // Experimental: write RL decision trace to JSON Lines.
+  bool rl_trace;
+  std::string rl_trace_file;
+
   // Multi-Threading
   mutex_t merge_mutex;
   int threads;
-  std::vector<sim_t*> children; // Manual delete!
+  std::vector<sim_t*> children;  // Manual delete!
   int thread_index;
   computer_process::priority_e process_priority;
   std::shared_ptr<work_queue_t> work_queue;
@@ -642,7 +657,7 @@ struct sim_t : private sc_thread_t
   std::string spell_query_xml_output_file_str;
   unsigned spell_query_wrap;
 
-  std::unique_ptr<mutex_t> pause_mutex; // External pause mutex, instantiated an external entity (in our case the GUI).
+  std::unique_ptr<mutex_t> pause_mutex;  // External pause mutex, instantiated an external entity (in our case the GUI).
   bool paused;
 
   // Highcharts stuff
@@ -653,7 +668,7 @@ struct sim_t : private sc_thread_t
 
   // A map of highcharts data, added as a json object into the HTML report. JQuery installs handlers
   // to correct elements (toggled elements in the HTML report) based on the data.
-  std::map<std::string, std::vector<std::string> > chart_data;
+  std::map<std::string, std::vector<std::string>> chart_data;
 
   bool chart_show_relative_difference;
   // Use the max metric actor as the relative difference base instead of the min
@@ -664,7 +679,7 @@ struct sim_t : private sc_thread_t
 
   // List of callbacks to call when an actor_target_data_t object is created. Currently used to
   // initialize the generic targetdata debuffs/dots we have.
-  std::vector<std::function<void(actor_target_data_t*)> > target_data_initializer;
+  std::vector<std::function<void( actor_target_data_t* )>> target_data_initializer;
 
   bool display_hotfixes, disable_hotfixes;
   bool display_bonus_ids;
@@ -686,47 +701,47 @@ struct sim_t : private sc_thread_t
   ~sim_t() override;
 
   void run() override;
-  int       main( const std::vector<std::string>& args );
-  double    iteration_time_adjust();
-  double    expected_max_time() const;
-  bool      is_canceled() const;
-  void      cancel_iteration();
-  void      cancel();
-  void      interrupt();
-  void      add_relative( sim_t* cousin );
-  void      remove_relative( sim_t* cousin );
+  int main( const std::vector<std::string>& args );
+  double iteration_time_adjust();
+  double expected_max_time() const;
+  bool is_canceled() const;
+  void cancel_iteration();
+  void cancel();
+  void interrupt();
+  void add_relative( sim_t* cousin );
+  void remove_relative( sim_t* cousin );
   sim_progress_t progress( std::string* detailed = nullptr, int index = -1 );
-  double    progress( std::string& phase, std::string* detailed = nullptr, int index = -1 );
-  void      detailed_progress( std::string*, int current_iterations, int total_iterations );
-  void      datacollection_begin();
-  void      datacollection_end();
-  void      reset();
-  void      check_actors();
-  void      init_fight_style();
-  void      init_parties();
-  void      init_actors();
-  void      init_actor( player_t* );
-  void      init_actor_pets();
-  void      init();
-  void      analyze();
-  void      merge( sim_t& other_sim );
-  void      merge();
-  bool      iterate();
-  void      partition();
-  bool      execute();
-  void      analyze_error();
-  void      analyze_iteration_data();
-  void      print_options();
-  void      add_option( std::unique_ptr<option_t> opt );
-  void      create_options();
-  bool      parse_option( const std::string& name, const std::string& value );
-  void      setup( sim_control_t* );
-  bool      time_to_think( timespan_t proc_time );
+  double progress( std::string& phase, std::string* detailed = nullptr, int index = -1 );
+  void detailed_progress( std::string*, int current_iterations, int total_iterations );
+  void datacollection_begin();
+  void datacollection_end();
+  void reset();
+  void check_actors();
+  void init_fight_style();
+  void init_parties();
+  void init_actors();
+  void init_actor( player_t* );
+  void init_actor_pets();
+  void init();
+  void analyze();
+  void merge( sim_t& other_sim );
+  void merge();
+  bool iterate();
+  void partition();
+  bool execute();
+  void analyze_error();
+  void analyze_iteration_data();
+  void print_options();
+  void add_option( std::unique_ptr<option_t> opt );
+  void create_options();
+  bool parse_option( const std::string& name, const std::string& value );
+  void setup( sim_control_t* );
+  bool time_to_think( timespan_t proc_time );
   player_t* find_player( util::string_view name ) const;
   player_t* find_player( int index ) const;
   cooldown_t* get_cooldown( util::string_view name );
-  void      use_optimal_buffs_and_debuffs( int value );
-  std::unique_ptr<expr_t>   create_expression( util::string_view name );
+  void use_optimal_buffs_and_debuffs( int value );
+  std::unique_ptr<expr_t> create_expression( util::string_view name );
 
   /**
    * Create error with printf formatting.
@@ -737,7 +752,7 @@ struct sim_t : private sc_thread_t
     if ( thread_index != 0 )
       return;
 
-    set_error( level, fmt::sprintf( format, std::forward<Args>(args)... ) );
+    set_error( level, fmt::sprintf( format, std::forward<Args>( args )... ) );
   }
 
   template <typename... Args>
@@ -746,7 +761,7 @@ struct sim_t : private sc_thread_t
     if ( thread_index != 0 )
       return;
 
-    set_error( error_level_e::TRIVIAL, fmt::sprintf( format, std::forward<Args>(args)... ) );
+    set_error( error_level_e::TRIVIAL, fmt::sprintf( format, std::forward<Args>( args )... ) );
   }
 
   /**
@@ -781,25 +796,37 @@ struct sim_t : private sc_thread_t
   void activate_actors();
 
   void heartbeat_event_callback();
-  std::vector<std::function<void(sim_t*)>> heartbeat_event_callback_function;
-  void register_heartbeat_event_callback( std::function<void( sim_t*)> fn );
+  std::vector<std::function<void( sim_t* )>> heartbeat_event_callback_function;
+  void register_heartbeat_event_callback( std::function<void( sim_t* )> fn );
 
   timespan_t current_time() const
-  { return event_mgr.current_time; }
+  {
+    return event_mgr.current_time;
+  }
   static double distribution_mean_error( const sim_t& s, const extended_sample_data_t& sd )
-  { return s.confidence_estimator * sd.mean_std_dev; }
-  void register_target_data_initializer(std::function<void(actor_target_data_t*)> cb)
-  { target_data_initializer.push_back( cb ); }
+  {
+    return s.confidence_estimator * sd.mean_std_dev;
+  }
+  void register_target_data_initializer( std::function<void( actor_target_data_t* )> cb )
+  {
+    target_data_initializer.push_back( cb );
+  }
   const rng::rng_t& rng() const
-  { return _rng; }
+  {
+    return _rng;
+  }
   rng::rng_t& rng()
-  { return _rng; }
+  {
+    return _rng;
+  }
   double averaged_range( double min, double max );
 
   // Thread id of this sim_t object
 #ifndef SC_NO_THREADING
   std::thread::id thread_id() const
-  { return sc_thread_t::thread_id(); }
+  {
+    return sc_thread_t::thread_id();
+  }
 #endif
 
   /**
@@ -816,9 +843,9 @@ struct sim_t : private sc_thread_t
    * Print using fmt libraries python-like formatting syntax.
    */
   template <typename... Args>
-  void print_debug( fmt::format_string<Args...> format, Args&& ... args )
+  void print_debug( fmt::format_string<Args...> format, Args&&... args )
   {
-    if ( ! debug )
+    if ( !debug )
       return;
 
     out_debug.vprint( format, fmt::make_format_args( args... ) );
@@ -831,9 +858,9 @@ struct sim_t : private sc_thread_t
    * Print using fmt libraries python-like formatting syntax.
    */
   template <typename... Args>
-  void print_log( fmt::format_string<Args...> format, Args&& ... args )
+  void print_log( fmt::format_string<Args...> format, Args&&... args )
   {
-    if ( ! log )
+    if ( !log )
       return;
 
     out_log.vprint( format, fmt::make_format_args( args... ) );

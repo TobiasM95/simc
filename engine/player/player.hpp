@@ -75,21 +75,26 @@ struct spell_data_t;
 struct player_talent_points_t;
 struct uptime_t;
 struct ground_aoe_params_t;
-namespace azerite {
-  class azerite_state_t;
-  class azerite_essence_state_t;
+namespace azerite
+{
+class azerite_state_t;
+class azerite_essence_state_t;
+}  // namespace azerite
+namespace io
+{
+class ofstream;
 }
-namespace io {
-  class ofstream;
+namespace report
+{
+using sc_html_stream = io::ofstream;
 }
-namespace report {
-  using sc_html_stream = io::ofstream;
+namespace js
+{
+struct JsonOutput;
 }
-namespace js {
-  struct JsonOutput;
-}
-namespace covenant {
-  class covenant_state_t;
+namespace covenant
+{
+class covenant_state_t;
 }
 
 /* Player Report Extension
@@ -107,8 +112,8 @@ namespace covenant {
 struct player_report_extension_t
 {
 public:
-  virtual ~player_report_extension_t() = default;
-  virtual void html_customsection(report::sc_html_stream&) = 0;
+  virtual ~player_report_extension_t()                       = default;
+  virtual void html_customsection( report::sc_html_stream& ) = 0;
 };
 
 struct parsed_assisted_combat_rule_t
@@ -119,27 +124,44 @@ struct parsed_assisted_combat_rule_t
   bool allow_duplicates;
 
   parsed_assisted_combat_rule_t( const char* expr )
-    : expr( expr ), comment( {} ), show_diff( false ), allow_duplicates( true ) {}
+    : expr( expr ), comment( {} ), show_diff( false ), allow_duplicates( true )
+  {
+  }
 
   parsed_assisted_combat_rule_t( std::string expr )
-    : expr( expr ), comment( {} ), show_diff( false ), allow_duplicates( true ) {}
+    : expr( expr ), comment( {} ), show_diff( false ), allow_duplicates( true )
+  {
+  }
 
   parsed_assisted_combat_rule_t( std::string expr, bool show_diff )
-    : expr( expr ), comment( {} ), show_diff( show_diff ), allow_duplicates( true ) {}
+    : expr( expr ), comment( {} ), show_diff( show_diff ), allow_duplicates( true )
+  {
+  }
 
   parsed_assisted_combat_rule_t( std::string expr, const char* comment )
-    : expr( expr ), comment( comment ), show_diff( true ), allow_duplicates( true ) {}
+    : expr( expr ), comment( comment ), show_diff( true ), allow_duplicates( true )
+  {
+  }
 
   parsed_assisted_combat_rule_t( std::string expr, std::string comment, bool show_diff )
-    : expr( expr ), comment( comment ), show_diff( show_diff ), allow_duplicates( true ) {}
+    : expr( expr ), comment( comment ), show_diff( show_diff ), allow_duplicates( true )
+  {
+  }
 
   parsed_assisted_combat_rule_t( std::string expr, const char* comment, bool show_diff, bool allow_duplicates )
-    : expr( expr ), comment( comment ), show_diff( show_diff ), allow_duplicates( allow_duplicates ) {}
+    : expr( expr ), comment( comment ), show_diff( show_diff ), allow_duplicates( allow_duplicates )
+  {
+  }
 
   parsed_assisted_combat_rule_t( std::string expr, std::string comment, bool show_diff, bool allow_duplicates )
-    : expr( expr ), comment( comment ), show_diff( show_diff ), allow_duplicates( allow_duplicates ) {}
+    : expr( expr ), comment( comment ), show_diff( show_diff ), allow_duplicates( allow_duplicates )
+  {
+  }
 
-  operator std::string() { return expr; }
+  operator std::string()
+  {
+    return expr;
+  }
 };
 
 struct player_t : public actor_t
@@ -148,68 +170,93 @@ struct player_t : public actor_t
 
   // static values
   player_e type;
-  player_t* parent; // corresponding player in main thread
+  player_t* parent;  // corresponding player in main thread
   int index;
-  int creation_iteration; // The iteration when this actor was created, -1 for "init"
+  int creation_iteration;  // The iteration when this actor was created, -1 for "init"
   size_t actor_index;
-  int actor_spawn_index; // a unique identifier for each arise() of the actor
+  int actor_spawn_index;  // a unique identifier for each arise() of the actor
   // (static) attributes - things which should not change during combat
-  race_e       race;
-  role_e       role;
-  int          true_level; /* The character's true level. If the outcome would change when the character's level is
-                           scaled down (such as when timewalking) then use the level() method instead. */
-  int          party;
-  int          ready_type;
-  specialization_e  _spec;
-  bool         bugs; // If true, include known InGame mechanics which are probably the cause of a bug and not intended
-  int          disable_hotfixes;
-  bool         scale_player;
-  double       death_pct; // Player will die if he has equal or less than this value as health-pct
-  double       height; // Actor height, only used for enemies. Affects the travel distance calculation for spells.
-  double       combat_reach; // AKA hitbox size, for enemies.
+  race_e race;
+  role_e role;
+  int true_level; /* The character's true level. If the outcome would change when the character's level is
+                  scaled down (such as when timewalking) then use the level() method instead. */
+  int party;
+  int ready_type;
+  specialization_e _spec;
+  bool bugs;  // If true, include known InGame mechanics which are probably the cause of a bug and not intended
+  int disable_hotfixes;
+  bool scale_player;
+  double death_pct;     // Player will die if he has equal or less than this value as health-pct
+  double height;        // Actor height, only used for enemies. Affects the travel distance calculation for spells.
+  double combat_reach;  // AKA hitbox size, for enemies.
   profile_source profile_source_;
-  player_t*    default_target;
+  player_t* default_target;
 
   // dynamic attributes - things which change during combat
-  player_t*   target;
-  bool        initialized;
-  bool        precombat_initialized;
-  bool        potion_used;
-  double      leech_pool;  // for leech batching
-
+  player_t* target;
+  bool initialized;
+  bool precombat_initialized;
+  bool potion_used;
+  double leech_pool;  // for leech batching
 
   std::string talents_str, id_str, target_str;
   std::string region_str, server_str, origin_str;
   std::string race_str, professions_str, position_str;
   std::string class_talents_str, spec_talents_str, hero_talents_str;
   // Specify in-game time of day to determine Night Elf racial
-  enum timeofday_e { NIGHT_TIME, DAY_TIME, } timeofday;
+  enum timeofday_e
+  {
+    NIGHT_TIME,
+    DAY_TIME,
+  } timeofday;
   // Specify which loa Zandalari has chosen to determine racial
-  enum zandalari_loa_e { AKUNDA, BWONSAMDI, GONK, KIMBUL, KRAGWA, PAKU } zandalari_loa;
+  enum zandalari_loa_e
+  {
+    AKUNDA,
+    BWONSAMDI,
+    GONK,
+    KIMBUL,
+    KRAGWA,
+    PAKU
+  } zandalari_loa;
   // Specify which trick to use for Vulpera bag of tricks
-  enum vulpera_tricks_e { CORROSIVE, FLAMES, SHADOWS, HEALING, HOLY } vulpera_tricks;
+  enum vulpera_tricks_e
+  {
+    CORROSIVE,
+    FLAMES,
+    SHADOWS,
+    HEALING,
+    HOLY
+  } vulpera_tricks;
   // Specify which mineral to ingest for Earthen Dwarf racial
-  enum earthen_mineral_e { AMBER, EMERALD, ONYX, RUBY, SAPPHIRE } earthen_mineral;
+  enum earthen_mineral_e
+  {
+    AMBER,
+    EMERALD,
+    ONYX,
+    RUBY,
+    SAPPHIRE
+  } earthen_mineral;
 
   // GCD Related attributes
-  timespan_t  gcd_ready, base_gcd, min_gcd; // When is GCD ready, default base and minimum GCD times.
-  gcd_haste_type gcd_type; // If the current GCD is hasted, what haste type is used
-  double gcd_current_haste_value; // The currently used haste value for GCD speedup
+  timespan_t gcd_ready, base_gcd, min_gcd;  // When is GCD ready, default base and minimum GCD times.
+  gcd_haste_type gcd_type;                  // If the current GCD is hasted, what haste type is used
+  double gcd_current_haste_value;           // The currently used haste value for GCD speedup
 
   timespan_t started_waiting;
   std::vector<pet_t*> pet_list;
   std::vector<pet_t*> active_pets;
   std::vector<absorb_buff_t*> absorb_buff_list;
-  std::map<unsigned,instant_absorb_t> instant_absorb_list;
+  std::map<unsigned, instant_absorb_t> instant_absorb_list;
 
-  int         invert_scaling;
+  int invert_scaling;
 
   // Reaction
   rng::truncated_gauss_t reaction;
-  timespan_t  reaction_offset, reaction_max, reaction_nu;
+  timespan_t reaction_offset, reaction_max, reaction_nu;
   // Latency
   rng::truncated_gauss_t world_lag, brain_lag;
-  timespan_t  cooldown_tolerance_;
+  timespan_t cooldown_tolerance_;
 
   // Spell Queue
   bool enable_spell_queue;
@@ -217,7 +264,7 @@ struct player_t : public actor_t
 
   // Data access
   std::unique_ptr<dbc_t> dbc;
-  const dbc_override_t*  dbc_override;
+  const dbc_override_t* dbc_override;
 
   // Option Parsing
   std::vector<std::unique_ptr<option_t>> options;
@@ -279,28 +326,27 @@ struct player_t : public actor_t
     position_e position;
 
     friend void sc_format_to( const base_initial_current_t&, fmt::format_context::iterator );
-  }
-  base, // Base values, from some database or overridden by user
-  initial, // Base + Passive + Gear (overridden or items) + Player Enchants + Global Enchants
-  current; // Current values, reset to initial before every iteration
+  } base,       // Base values, from some database or overridden by user
+      initial,  // Base + Passive + Gear (overridden or items) + Player Enchants + Global Enchants
+      current;  // Current values, reset to initial before every iteration
 
   /// Passive combat rating multipliers
   rating_t passive_rating_multiplier;
 
-  gear_stats_t passive; // Passive stats from various passive auras (and similar effects)
+  gear_stats_t passive;  // Passive stats from various passive auras (and similar effects)
 
   timespan_t last_cast;
 
   // Defense Mechanics
   struct diminishing_returns_constants_t
   {
-    double horizontal_shift = 0.0;
+    double horizontal_shift       = 0.0;
     double block_vertical_stretch = 0.0;
-    double vertical_stretch = 0.0;
-    double dodge_factor = 1.0;
-    double parry_factor = 1.0;
-    double miss_factor = 1.0;
-    double block_factor = 1.0;
+    double vertical_stretch       = 0.0;
+    double dodge_factor           = 1.0;
+    double parry_factor           = 1.0;
+    double miss_factor            = 1.0;
+    double block_factor           = 1.0;
   } def_dr;
 
   // Weapons
@@ -309,7 +355,7 @@ struct player_t : public actor_t
 
   // Main, offhand, and ranged attacks
   attack_t* main_hand_attack;
-  attack_t*  off_hand_attack;
+  attack_t* off_hand_attack;
 
   // Current attack speed (needed for dynamic attack speed adjustments)
   double current_auto_attack_speed;
@@ -320,13 +366,13 @@ struct player_t : public actor_t
   action_t* executing;
   action_t* queueing;
   action_t* channeling;
-  action_t* strict_sequence; // Strict sequence of actions currently being executed
+  action_t* strict_sequence;  // Strict sequence of actions currently being executed
   event_t* demise_event;
   event_t* readying;
   event_t* off_gcd;
-  event_t* cast_while_casting_poll_event; // Periodically check for something to do while casting
+  event_t* cast_while_casting_poll_event;  // Periodically check for something to do while casting
   event_t* spell_queue_event;
-  std::vector<std::pair<const cooldown_t*,const cooldown_t*>> off_gcd_cd;
+  std::vector<std::pair<const cooldown_t*, const cooldown_t*>> off_gcd_cd;
   std::vector<std::pair<const cooldown_t*, const cooldown_t*>> cast_while_casting_cd;
   timespan_t off_gcd_ready;
   timespan_t cast_while_casting_ready;
@@ -337,7 +383,7 @@ struct player_t : public actor_t
   action_t* last_foreground_action;
   action_t* spell_queued_action;
   std::vector<action_t*> prev_gcd_actions;
-  std::vector<action_t*> off_gcdactions; // Returns all off gcd abilities used since the last gcd.
+  std::vector<action_t*> off_gcdactions;  // Returns all off gcd abilities used since the last gcd.
 
   // Delay time used by "cast_delay" expression to determine when an action
   // can be used at minimum after a spell cast has finished, including GCD
@@ -346,7 +392,7 @@ struct player_t : public actor_t
 
   // Callbacks
   effect_callbacks_t callbacks;
-  auto_dispose< std::vector<special_effect_t*> > special_effects;
+  auto_dispose<std::vector<special_effect_t*>> special_effects;
   std::vector<std::pair<player_t*, std::function<void( player_t* )>>> callbacks_on_demise;
   std::vector<std::pair<player_t*, std::function<void( void )>>> callbacks_on_arise;
   std::vector<std::function<void( player_t* )>> callbacks_on_kill;
@@ -355,7 +401,7 @@ struct player_t : public actor_t
   std::vector<std::function<void( player_t* )>> callbacks_on_init_finished;
 
   // Action Priority List
-  auto_dispose< std::vector<action_t*> > action_list;
+  auto_dispose<std::vector<action_t*>> action_list;
   /// Actions that have an action-specific dynamic targeting
   std::set<action_t*> dynamic_target_action_list;
   std::string action_list_str;
@@ -367,8 +413,8 @@ struct player_t : public actor_t
   bool use_blizzard_action_list;
   bool use_cds_with_blizzard_action_list;
   bool one_button_mode;
-  auto_dispose< std::vector<dot_t*> > dot_list;
-  auto_dispose< std::vector<action_priority_list_t*> > action_priority_list;
+  auto_dispose<std::vector<dot_t*>> dot_list;
+  auto_dispose<std::vector<action_priority_list_t*>> action_priority_list;
   std::vector<action_t*> precombat_action_list;
   action_priority_list_t* active_action_list;
   action_priority_list_t* default_action_list;
@@ -377,7 +423,7 @@ struct player_t : public actor_t
   action_priority_list_t* restore_action_list;
   execute_type restore_action_list_type;
   std::unordered_map<std::string, std::string> alist_map;
-  std::string action_list_information; // comment displayed in profile
+  std::string action_list_information;  // comment displayed in profile
   bool no_action_list_provided;
   std::unordered_map<std::string, std::string> apl_variable_map;
 
@@ -403,7 +449,7 @@ struct player_t : public actor_t
   timespan_t iteration_fight_length;
   timespan_t iteration_waiting_time, iteration_pooling_time;
   int iteration_executed_foreground_actions;
-  std::array< double, RESOURCE_MAX > iteration_resource_lost, iteration_resource_gained, iteration_resource_overflowed;
+  std::array<double, RESOURCE_MAX> iteration_resource_lost, iteration_resource_gained, iteration_resource_overflowed;
   double rps_gain, rps_loss;
 
   auto_dispose<std::vector<buff_t*>> buff_list;
@@ -427,19 +473,24 @@ struct player_t : public actor_t
   player_collected_data_t collected_data;
 
   // Damage
-  double iteration_dmg, priority_iteration_dmg, iteration_dmg_taken; // temporary accumulators
+  double iteration_dmg, priority_iteration_dmg, iteration_dmg_taken;  // temporary accumulators
+  double rl_last_priority_iteration_dmg;                              // experimental RL reward accumulator
+  std::vector<action_t*> rl_action_list;                              // cached RL action space (built once)
+  std::vector<std::string> rl_action_labels;                          // cached RL action labels
+  std::vector<action_t*> rl_wait_actions;                             // wait actions for RL pseudo-actions
   double dpr;
-  struct incoming_damage_entry_t {
+  struct incoming_damage_entry_t
+  {
     timespan_t time;
     double amount;
     school_e school;
   };
-  std::vector<incoming_damage_entry_t> incoming_damage; // for tank active mitigation conditionals
+  std::vector<incoming_damage_entry_t> incoming_damage;  // for tank active mitigation conditionals
 
   // Heal
-  double iteration_heal, iteration_heal_taken, iteration_absorb, iteration_absorb_taken; // temporary accumulators
+  double iteration_heal, iteration_heal_taken, iteration_absorb, iteration_absorb_taken;  // temporary accumulators
   double hpr;
-  std::vector<unsigned> absorb_priority; // for strict sequence absorbs
+  std::vector<unsigned> absorb_priority;  // for strict sequence absorbs
 
   player_processed_report_information_t report_information;
 
@@ -451,8 +502,8 @@ struct player_t : public actor_t
   std::string meta_gem_str, potion_str, flask_str, food_str, rune_str;
   std::string temporary_enchant_str;
   std::vector<item_t> items;
-  gear_stats_t gear, enchant; // Option based stats
-  gear_stats_t total_gear; // composite of gear, enchant and for non-pets sim -> enchant
+  gear_stats_t gear, enchant;  // Option based stats
+  gear_stats_t total_gear;     // composite of gear, enchant and for non-pets sim -> enchant
   std::unique_ptr<set_bonus_t> sets;
   std::string set_bonus_str;
   meta_gem_e meta_gem;
@@ -473,10 +524,11 @@ struct player_t : public actor_t
 
   // Movement & Position
   double base_movement_speed;
-  double passive_modifier; // _PASSIVE_ movement speed modifiers
+  double passive_modifier;  // _PASSIVE_ movement speed modifiers
   double x_position, y_position, default_x_position, default_y_position;
 
-  struct consumables_t {
+  struct consumables_t
+  {
     buff_t* flask;
     stat_buff_t* guardian_elixir;
     stat_buff_t* battle_elixir;
@@ -515,7 +567,7 @@ struct player_t : public actor_t
     buff_t* rooted;
     std::array<buff_t*, 4> ancestral_call;
     buff_t* fireblood;
-    buff_t* symbol_of_hope; // Priest spell
+    buff_t* symbol_of_hope;  // Priest spell
 
     buff_t* berserking;
     buff_t* bloodlust;
@@ -525,24 +577,24 @@ struct player_t : public actor_t
     buff_t* tempus_repit;
     buff_t* fortitude;
 
-    buff_t* legendary_aoe_ring; // Legendary ring buff.
+    buff_t* legendary_aoe_ring;  // Legendary ring buff.
 
     // 7.0 trinket proxy buffs
     buff_t* incensed;
-    buff_t* taste_of_mana; // Gnawed Thumb Ring buff
+    buff_t* taste_of_mana;  // Gnawed Thumb Ring buff
 
     // 7.1
-    buff_t* nefarious_pact; // Whispers in the dark good buff
-    buff_t* devils_due; // Whispers in the dark bad buff
+    buff_t* nefarious_pact;  // Whispers in the dark good buff
+    buff_t* devils_due;      // Whispers in the dark bad buff
 
-    buff_t* demon_damage_buff; // 6.2.3 Heirloom trinket demon damage buff
+    buff_t* demon_damage_buff;  // 6.2.3 Heirloom trinket demon damage buff
 
     // Darkmoon Faire versatility food
     buff_t* dmf_well_fed;
 
     // 8.0
-    buff_t* galeforce_striking; // Gale-Force Striking weapon enchant
-    buff_t* torrent_of_elements; // Torrent of Elements weapon enchant
+    buff_t* galeforce_striking;   // Gale-Force Striking weapon enchant
+    buff_t* torrent_of_elements;  // Torrent of Elements weapon enchant
 
     // 8.0 - Leyshock's Grand Compendium stat buffs
     buff_t* leyshock_crit;
@@ -555,60 +607,62 @@ struct player_t : public actor_t
 
     /// 8.2 Azerite Essences
     buff_t* memory_of_lucid_dreams;
-    buff_t* lucid_dreams; // Versatility Buff from Rank 3
-    buff_t* seething_rage_essence; // Blood of the Enemy major - 25% crit dam
+    buff_t* lucid_dreams;           // Versatility Buff from Rank 3
+    buff_t* seething_rage_essence;  // Blood of the Enemy major - 25% crit dam
 
     // 8.2 misc
-    buff_t* damage_to_aberrations; // Benthic belt special effect
-    buff_t* fathom_hunter; // Follower themed Benthic boots special effect
-    buff_t* delirious_frenzy; // Dream's End 1H STR axe attack speed buff
+    buff_t* damage_to_aberrations;  // Benthic belt special effect
+    buff_t* fathom_hunter;          // Follower themed Benthic boots special effect
+    buff_t* delirious_frenzy;       // Dream's End 1H STR axe attack speed buff
 
     // 9.0 class buffs
-    buff_t* focus_magic; // Mage talent
-    buff_t* power_infusion; // Priest spell
-    buff_t* rallying_cry; // Warrior spell
+    buff_t* focus_magic;     // Mage talent
+    buff_t* power_infusion;  // Priest spell
+    buff_t* rallying_cry;    // Warrior spell
 
     // 9.0 class covenant buffs
-    buff_t* blessing_of_summer; // Night Fae Paladin spell
-    buff_t* blessing_of_autumn; // Night Fae Paladin spell
-    buff_t* blessing_of_winter; // Night Fae Paladin spell
-    buff_t* blessing_of_spring; // Night Fae Paladin spell
-    buff_t* conquerors_banner; // Necrolord Warrior spell
+    buff_t* blessing_of_summer;  // Night Fae Paladin spell
+    buff_t* blessing_of_autumn;  // Night Fae Paladin spell
+    buff_t* blessing_of_winter;  // Night Fae Paladin spell
+    buff_t* blessing_of_spring;  // Night Fae Paladin spell
+    buff_t* conquerors_banner;   // Necrolord Warrior spell
 
     // 9.0 Soulbinds
-    buff_t* wild_hunt_tactics;  // night_fae/korayn - dummy buff used to quickly check if soulbind is enabled
-    buff_t* volatile_solvent_humanoid; // necrolord/marileth - humanoid (mastery) buff
-    buff_t* volatile_solvent_stats; // necrolord/marileth - beast (primary) and dragonkin (crit) buffs
-    buff_t* volatile_solvent_damage; // necrolord/marileth - elemental (magic) and giant (physical) % damage done buffs
-    buff_t* battlefield_presence; // venthyr/draven - damage increase buff based on number of enemies
-    buff_t* emenis_magnificent_skin; //necrolord/emeni - buff applied when using fleshcraft that increases max health
-    buff_t* trembling_pustules; //necrolord/emeni - buff applied when using fleshcraft that increases procs Pustule Eruption damage
-    buff_t* hold_your_ground; //venthyr/draven - stamina % buff when standing still
-    buff_t* waking_bone_breastplate; //necrolord/heirmir - max health % buff when near 3 or more enemies
+    buff_t* wild_hunt_tactics;          // night_fae/korayn - dummy buff used to quickly check if soulbind is enabled
+    buff_t* volatile_solvent_humanoid;  // necrolord/marileth - humanoid (mastery) buff
+    buff_t* volatile_solvent_stats;     // necrolord/marileth - beast (primary) and dragonkin (crit) buffs
+    buff_t* volatile_solvent_damage;  // necrolord/marileth - elemental (magic) and giant (physical) % damage done buffs
+    buff_t* battlefield_presence;     // venthyr/draven - damage increase buff based on number of enemies
+    buff_t* emenis_magnificent_skin;  // necrolord/emeni - buff applied when using fleshcraft that increases max health
+    buff_t* trembling_pustules;  // necrolord/emeni - buff applied when using fleshcraft that increases procs Pustule
+                                 // Eruption damage
+    buff_t* hold_your_ground;    // venthyr/draven - stamina % buff when standing still
+    buff_t* waking_bone_breastplate;  // necrolord/heirmir - max health % buff when near 3 or more enemies
 
     // 9.1 Soulbinds
-    buff_t* wild_hunt_strategem_tracking; //night_fae/korayn - tracking buff to allow procs of wild_hunt_strategem on enemy targets
+    buff_t* wild_hunt_strategem_tracking;  // night_fae/korayn - tracking buff to allow procs of wild_hunt_strategem on
+                                           // enemy targets
 
     // 9.0 Runecarves
-    buff_t* norgannons_sagacity;         // consume stacks to allow casting while moving
-    buff_t* echo_of_eonar;               // passive self buff
+    buff_t* norgannons_sagacity;  // consume stacks to allow casting while moving
+    buff_t* echo_of_eonar;        // passive self buff
 
     // 9.1 Legendary Buffs
-    buff_t* pact_of_the_soulstalkers; // Kyrian Hunter Legendary
+    buff_t* pact_of_the_soulstalkers;  // Kyrian Hunter Legendary
 
     // 9.1 Shards of Domination
-    buff_t* coldhearted; // Shard of Cor
+    buff_t* coldhearted;  // Shard of Cor
 
     // Trinkets
     buff_t* soleahs_secret_technique_external;
     buff_t* elegy_of_the_eternals_external;
 
     // 9.2 Sepulcher of the First Ones
-    buff_t* boon_of_azeroth; // Jailer fight buff
-    buff_t* boon_of_azeroth_mythic; // Jailer fight buff (Mythic)
+    buff_t* boon_of_azeroth;         // Jailer fight buff
+    buff_t* boon_of_azeroth_mythic;  // Jailer fight buff (Mythic)
 
     // 10.0 Buffs
-    buff_t* chilled_clarity;  // potion of chilled clarity
+    buff_t* chilled_clarity;       // potion of chilled clarity
     buff_t* elemental_chaos_fire;  // phial of elemental chaos
     buff_t* elemental_chaos_air;
     buff_t* elemental_chaos_earth;
@@ -616,16 +670,16 @@ struct player_t : public actor_t
     buff_t* tome_of_unstable_power;
     buff_t* way_of_controlled_currents;
     buff_t* stormeaters_boon;
-    buff_t* heavens_nemesis; // Neltharax, Enemy of the Sky
+    buff_t* heavens_nemesis;  // Neltharax, Enemy of the Sky
 
     // 11.0 The War Within
-    buff_t* ingest_mineral;  // earthen well fed racial
-    buff_t* surekian_grace;  // sik'ran's shadow arsenal barrage movement speed buff
-    buff_t* earthen_ire;     // sigil of algari concordance tank buff
+    buff_t* ingest_mineral;                    // earthen well fed racial
+    buff_t* surekian_grace;                    // sik'ran's shadow arsenal barrage movement speed buff
+    buff_t* earthen_ire;                       // sigil of algari concordance tank buff
     buff_t* quickwicks_quick_trick_wick_walk;  // quickwick candlestick movement speed buff
-    buff_t* building_momentum;  // scroll of momentum counter buff
-    buff_t* full_momentum;      // scroll of momentum max buff
-    buff_t* potion_bomb_of_power; // potion bomb of power primary stat
+    buff_t* building_momentum;                 // scroll of momentum counter buff
+    buff_t* full_momentum;                     // scroll of momentum max buff
+    buff_t* potion_bomb_of_power;              // potion bomb of power primary stat
   } buffs;
 
   struct debuffs_t
@@ -642,8 +696,8 @@ struct player_t : public actor_t
     buff_t* mortal_wounds;
 
     // BfA Raid Damage Modifier Debuffs
-    buff_t* chaos_brand;  // Demon Hunter
-    buff_t* mystic_touch; // Monk
+    buff_t* chaos_brand;   // Demon Hunter
+    buff_t* mystic_touch;  // Monk
 
     // Dragonflight Raid Damage Modifier Debuffs
     buff_t* hunters_mark;
@@ -673,7 +727,6 @@ struct player_t : public actor_t
     int soleahs_secret_technique;
     std::string elegy_of_the_eternals;
   } external_buffs;
-
 
   struct gains_t
   {
@@ -735,7 +788,7 @@ struct player_t : public actor_t
     double mastery_diff = 0.0;
     double vers_diff    = 0.0;
     double stam_diff    = 0.0;
-  } antumbra; // 9.2 Rygelon Dagger
+  } antumbra;  // 9.2 Rygelon Dagger
 
   struct passives_t
   {
@@ -746,7 +799,7 @@ struct player_t : public actor_t
   bool active_during_iteration;
   const spell_data_t* spec_spell;
   const spell_data_t* single_button_assistant;
-  const spelleffect_data_t* _mastery; // = find_mastery_spell( specialization() ) -> effectN( 1 );
+  const spelleffect_data_t* _mastery;  // = find_mastery_spell( specialization() ) -> effectN( 1 );
   player_stat_cache_t cache;
   auto_dispose<std::vector<action_variable_t*>> variables;
   std::vector<std::string> action_map;
@@ -781,22 +834,43 @@ struct player_t : public actor_t
     T default_value;
     T current_value;
 
-    player_option_t( const T val = T() ) : default_value( val ), current_value( val ) {}
+    player_option_t( const T val = T() ) : default_value( val ), current_value( val )
+    {
+    }
 
     template <typename U = T, typename = std::enable_if_t<std::is_same_v<U, std::string>>>
-    player_option_t( const char* val ) : default_value( val ), current_value( val ) {}
+    player_option_t( const char* val ) : default_value( val ), current_value( val )
+    {
+    }
 
-    operator T&() { return current_value; }
-    operator T&() const { return current_value; }
-    bool operator==( T other ) { return current_value == other; }
+    operator T&()
+    {
+      return current_value;
+    }
+    operator T&() const
+    {
+      return current_value;
+    }
+    bool operator==( T other )
+    {
+      return current_value == other;
+    }
 
     template <typename U = T, typename = std::enable_if_t<std::is_same_v<U, std::string>>>
-    operator std::string_view() const { return current_value; }
+    operator std::string_view() const
+    {
+      return current_value;
+    }
 
-    bool is_default() const { return current_value == default_value; }
+    bool is_default() const
+    {
+      return current_value == default_value;
+    }
 
     friend void sc_format_to( const player_option_t<T>& opt, fmt::format_context::iterator out )
-    { fmt::format_to( out, "{}", opt.current_value ); }
+    {
+      fmt::format_to( out, "{}", opt.current_value );
+    }
   };
 
   struct shadowlands_opt_t
@@ -849,15 +923,18 @@ struct player_t : public actor_t
     double rallied_to_victory_min_allies = 0;
     // Set if the haste debuff for ashes of the embersoul can be prevented
     bool embersoul_debuff_immune = false;
-    // Rallied to victory skip chance for multi actor sims. Makes it skip a buff to lower the power and simulate losing some to healers.
+    // Rallied to victory skip chance for multi actor sims. Makes it skip a buff to lower the power and simulate losing
+    // some to healers.
     double rallied_to_victory_multi_actor_skip_chance = 0.2;
     // Enable String of Delicacies Ally Estimation
     bool string_of_delicacies_ally_estimate = false;
     // Set the minimum number of allies buffed by STrong of Delicacies
     double string_of_delicacies_min_allies = 0;
-    // String of Delicacies skip chance for multi actor sims. Makes it skip a buff to lower the power and simulate loosing some to healers.
+    // String of Delicacies skip chance for multi actor sims. Makes it skip a buff to lower the power and simulate
+    // loosing some to healers.
     double string_of_delicacies_multi_actor_skip_chance = 0.2;
-    // Which random method to use to determine Balefire Branch stack loss from damage. Accepts "rppm", "percent", or "constant"
+    // Which random method to use to determine Balefire Branch stack loss from damage. Accepts "rppm", "percent", or
+    // "constant"
     player_option_t<std::string> balefire_branch_loss_rng_type = "constant";
     // Set RPPM when "rppm" method is selected
     double balefire_branch_loss_rppm = 2;
@@ -891,17 +968,17 @@ struct player_t : public actor_t
     // how close to desired stacks you can be before potentially adjusting
     int ovinaxs_mercurial_egg_desired_primary_stacks_leeway = 3;
     // time to pick up Entropic Skardyn Core fragment
-    timespan_t entropic_skardyn_core_pickup_delay = 4_s;
+    timespan_t entropic_skardyn_core_pickup_delay  = 4_s;
     timespan_t entropic_skardyn_core_pickup_stddev = 1_s;
     // when to enter and how long to stay in light for carved blazikon wax
-    timespan_t carved_blazikon_wax_enter_light_delay = 4_s;
-    timespan_t carved_blazikon_wax_enter_light_stddev = 1_s;
+    timespan_t carved_blazikon_wax_enter_light_delay      = 4_s;
+    timespan_t carved_blazikon_wax_enter_light_stddev     = 1_s;
     timespan_t carved_blazikon_wax_stay_in_light_duration = 0_s;  // remain until the end
-    timespan_t carved_blazikon_wax_stay_in_light_stddev = 0_s;
+    timespan_t carved_blazikon_wax_stay_in_light_stddev   = 0_s;
     // allies with signet of the priory
     player_option_t<std::string> signet_of_the_priory_party_stats;
     timespan_t signet_of_the_priory_party_use_cooldown = 120_s;
-    timespan_t signet_of_the_priory_party_use_stddev = 6_s;
+    timespan_t signet_of_the_priory_party_use_stddev   = 6_s;
     // harvester's edict chance to intercept
     double harvesters_edict_intercept_chance = 0.2;
     // Dawn/Duskthread Lining
@@ -931,7 +1008,7 @@ struct player_t : public actor_t
     double sureki_zealots_insignia_rppm_multiplier        = 0.9;
     player_option_t<std::string> windsingers_passive_stat = "";
     // Mister Lock-n-Stalk mode of operation
-    player_option_t<std::string> mister_locknstalk_mode = "dynamic";
+    player_option_t<std::string> mister_locknstalk_mode   = "dynamic";
     player_option_t<std::string> jastor_diamond_ally_stat = "none";
     double suspicious_energy_drink_bonus_chance           = 0;
     timespan_t additional_gcd_time                        = 0_s;
@@ -975,22 +1052,30 @@ public:
 
   // Static methods
   static player_t* create( sim_t* sim, const player_description_t& );
-  static bool _is_enemy( player_e t ) { return t == ENEMY || t == ENEMY_ADD || t == ENEMY_ADD_BOSS || t == TANK_DUMMY; }
-  static bool _is_sleeping( const player_t* t ) { return t -> current.sleeping; }
+  static bool _is_enemy( player_e t )
+  {
+    return t == ENEMY || t == ENEMY_ADD || t == ENEMY_ADD_BOSS || t == TANK_DUMMY;
+  }
+  static bool _is_sleeping( const player_t* t )
+  {
+    return t->current.sleeping;
+  }
 
   // Overrides
   const char* name() const override
-  { return name_str.c_str(); }
+  {
+    return name_str.c_str();
+  }
 
   // Normal methods
-  double get_stat_value(stat_e);
+  double get_stat_value( stat_e );
   void stat_gain( stat_e stat, double amount, gain_t* g = nullptr, action_t* a = nullptr, bool temporary = false );
   void stat_loss( stat_e stat, double amount, gain_t* g = nullptr, action_t* a = nullptr, bool temporary = false );
   void clear_action_priority_lists() const;
   void copy_action_priority_list( util::string_view old_list, util::string_view new_list );
   void change_position( position_e );
-  void register_resource_callback(resource_e resource, double value, resource_callback_function_t callback,
-      bool use_pct, bool fire_once = true);
+  void register_resource_callback( resource_e resource, double value, resource_callback_function_t callback,
+                                   bool use_pct, bool fire_once = true );
   bool add_action( util::string_view action, util::string_view options = {}, util::string_view alist = "default" );
   bool add_action( const spell_data_t* s, util::string_view options = {}, util::string_view alist = "default" );
   void add_option( std::unique_ptr<option_t> o );
@@ -998,42 +1083,74 @@ public:
 
   bool is_moving() const;
   double composite_block_dr( double extra_block ) const;
-  bool is_player() const { return type > PLAYER_NONE && type < PLAYER_PET; }
-  bool is_pet() const { return type == PLAYER_PET || type == PLAYER_GUARDIAN || type == ENEMY_ADD || type == ENEMY_ADD_BOSS; }
-  bool is_enemy() const { return _is_enemy( type ); }
-  bool is_boss() const { return type == ENEMY || type == ENEMY_ADD_BOSS || type == TANK_DUMMY; }
-  bool is_add() const { return type == ENEMY_ADD || type == ENEMY_ADD_BOSS; }
-  bool is_sleeping() const { return _is_sleeping( this ); }
+  bool is_player() const
+  {
+    return type > PLAYER_NONE && type < PLAYER_PET;
+  }
+  bool is_pet() const
+  {
+    return type == PLAYER_PET || type == PLAYER_GUARDIAN || type == ENEMY_ADD || type == ENEMY_ADD_BOSS;
+  }
+  bool is_enemy() const
+  {
+    return _is_enemy( type );
+  }
+  bool is_boss() const
+  {
+    return type == ENEMY || type == ENEMY_ADD_BOSS || type == TANK_DUMMY;
+  }
+  bool is_add() const
+  {
+    return type == ENEMY_ADD || type == ENEMY_ADD_BOSS;
+  }
+  bool is_sleeping() const
+  {
+    return _is_sleeping( this );
+  }
   bool is_my_pet( const player_t* t ) const;
   /// Is the actor active currently
   bool is_active() const;
   bool in_gcd() const;
   bool recent_cast() const;
   bool dual_wield() const
-  { return main_hand_weapon.type != WEAPON_NONE && off_hand_weapon.type != WEAPON_NONE; }
+  {
+    return main_hand_weapon.type != WEAPON_NONE && off_hand_weapon.type != WEAPON_NONE;
+  }
   bool has_shield_equipped() const;
   specialization_e specialization() const
-  { return _spec; }
+  {
+    return _spec;
+  }
   const char* primary_tree_name() const;
   bool has_hero_tree( hero_tree_e ) const;
   timespan_t total_reaction_time();
   double avg_item_level() const;
   double get_attribute( attribute_e a ) const;
   double strength() const
-  { return get_attribute( ATTR_STRENGTH ); }
+  {
+    return get_attribute( ATTR_STRENGTH );
+  }
   double agility() const
-  { return get_attribute( ATTR_AGILITY ); }
+  {
+    return get_attribute( ATTR_AGILITY );
+  }
   double stamina() const
-  { return get_attribute( ATTR_STAMINA ); }
+  {
+    return get_attribute( ATTR_STAMINA );
+  }
   double intellect() const
-  { return get_attribute( ATTR_INTELLECT ); }
+  {
+    return get_attribute( ATTR_INTELLECT );
+  }
   double spirit() const
-  { return get_attribute( ATTR_SPIRIT ); }
+  {
+    return get_attribute( ATTR_SPIRIT );
+  }
   double mastery_coefficient() const;
   double get_player_distance( const player_t& ) const;
   double get_ground_aoe_distance( const action_state_t& ) const;
   double get_position_distance( double m = 0, double v = 0 ) const;
-  double compute_incoming_damage( timespan_t interval) const;
+  double compute_incoming_damage( timespan_t interval ) const;
   double compute_incoming_magic_damage( timespan_t interval ) const;
   double calculate_time_to_bloodlust() const;
   slot_e parent_item_slot( const item_t& item ) const;
@@ -1041,8 +1158,9 @@ public:
   /// Actor-specific cooldown tolerance for queueable actions
   timespan_t cooldown_tolerance() const;
   position_e position() const
-  { return current.position; }
-
+  {
+    return current.position;
+  }
 
   pet_t* cast_pet();
   const pet_t* cast_pet() const;
@@ -1052,7 +1170,8 @@ public:
   azerite_essence_t find_azerite_essence( util::string_view name, bool tokenized = false ) const;
   azerite_essence_t find_azerite_essence( unsigned power_id ) const;
 
-  item_runeforge_t find_runeforge_legendary( util::string_view name, bool tokenized = false, bool force_unity = false ) const;
+  item_runeforge_t find_runeforge_legendary( util::string_view name, bool tokenized = false,
+                                             bool force_unity = false ) const;
 
   conduit_data_t find_conduit_spell( util::string_view name ) const;
   const spell_data_t* find_soulbind_spell( util::string_view name ) const;
@@ -1063,38 +1182,41 @@ public:
   const spell_data_t* find_rank_spell( util::string_view name, util::string_view rank,
                                        specialization_e s = SPEC_NONE ) const;
   const spell_data_t* find_pet_spell( util::string_view name ) const;
-  player_talent_t find_talent_spell( talent_tree tree, util::string_view name, specialization_e s = SPEC_NONE, bool name_tokenized = false ) const;
-  player_talent_t find_talent_spell( talent_tree tree, unsigned spell_id, specialization_e s = SPEC_NONE  ) const;
+  player_talent_t find_talent_spell( talent_tree tree, util::string_view name, specialization_e s = SPEC_NONE,
+                                     bool name_tokenized = false ) const;
+  player_talent_t find_talent_spell( talent_tree tree, unsigned spell_id, specialization_e s = SPEC_NONE ) const;
   player_talent_t find_talent_spell( unsigned talent_entry_id ) const;
 
   const spell_data_t* find_specialization_spell( util::string_view name, specialization_e s = SPEC_NONE ) const;
-  const spell_data_t* find_specialization_spell( util::string_view name, util::string_view desc, specialization_e s = SPEC_NONE ) const;
+  const spell_data_t* find_specialization_spell( util::string_view name, util::string_view desc,
+                                                 specialization_e s = SPEC_NONE ) const;
   const spell_data_t* find_specialization_spell( unsigned spell_id, specialization_e s = SPEC_NONE ) const;
   const spell_data_t* find_mastery_spell( specialization_e s ) const;
   const spell_data_t* find_spell( util::string_view name, specialization_e s = SPEC_NONE ) const;
   const spell_data_t* find_spell( unsigned int id, specialization_e s ) const;
   const spell_data_t* find_spell( unsigned int id ) const;
 
-  pet_t*      find_pet( util::string_view name ) const;
-  item_t*     find_item_by_name( util::string_view name );
-  item_t*     find_item_by_id( unsigned id );
-  item_t*     find_item_by_use_effect_name( util::string_view name );
-  action_t*   find_action( util::string_view ) const;
+  pet_t* find_pet( util::string_view name ) const;
+  item_t* find_item_by_name( util::string_view name );
+  item_t* find_item_by_id( unsigned id );
+  item_t* find_item_by_use_effect_name( util::string_view name );
+  action_t* find_action( util::string_view ) const;
   cooldown_t* find_cooldown( util::string_view name ) const;
   target_specific_cooldown_t* find_target_specific_cooldown( util::string_view name ) const;
-  dot_t*      find_dot     ( util::string_view name, player_t* source ) const;
-  stats_t*    find_stats   ( util::string_view name ) const;
-  gain_t*     find_gain    ( util::string_view name ) const;
-  proc_t*     find_proc    ( util::string_view name ) const;
-  benefit_t*  find_benefit ( util::string_view name ) const;
-  uptime_t*   find_uptime  ( util::string_view name ) const;
+  dot_t* find_dot( util::string_view name, player_t* source ) const;
+  stats_t* find_stats( util::string_view name ) const;
+  gain_t* find_gain( util::string_view name ) const;
+  proc_t* find_proc( util::string_view name ) const;
+  benefit_t* find_benefit( util::string_view name ) const;
+  uptime_t* find_uptime( util::string_view name ) const;
   sample_data_helper_t* find_sample_data( util::string_view name ) const;
   action_priority_list_t* find_action_priority_list( util::string_view name ) const;
   int find_action_id( util::string_view name ) const;
   int find_dot_id( util::string_view name ) const;
 
   cooldown_t* get_cooldown( util::string_view name, action_t* action = nullptr );
-  target_specific_cooldown_t* get_target_specific_cooldown( util::string_view name, timespan_t duration = timespan_t::zero() );
+  target_specific_cooldown_t* get_target_specific_cooldown( util::string_view name,
+                                                            timespan_t duration = timespan_t::zero() );
   target_specific_cooldown_t* get_target_specific_cooldown( cooldown_t& base_cooldown );
 
   template <typename RNG, typename... Args>
@@ -1127,27 +1249,32 @@ public:
                                       threshold_rng_fn accumulator_fn = nullptr, bool random_initial_state = true,
                                       bool roll_over = false );
 
-  dot_t*      get_dot     ( util::string_view name, player_t* source );
-  gain_t*     get_gain    ( util::string_view name );
-  proc_t*     get_proc    ( util::string_view name, unsigned flags = proc_report_e::REPORT_PROC_ALL );
-  stats_t*    get_stats   ( util::string_view name, action_t* action = nullptr );
-  benefit_t*  get_benefit ( util::string_view name );
-  uptime_t*   get_uptime  ( util::string_view name );
+  dot_t* get_dot( util::string_view name, player_t* source );
+  gain_t* get_gain( util::string_view name );
+  proc_t* get_proc( util::string_view name, unsigned flags = proc_report_e::REPORT_PROC_ALL );
+  stats_t* get_stats( util::string_view name, action_t* action = nullptr );
+  benefit_t* get_benefit( util::string_view name );
+  uptime_t* get_uptime( util::string_view name );
   sample_data_helper_t* get_sample_data( util::string_view name );
   action_priority_list_t* get_action_priority_list( util::string_view name, util::string_view comment = {} );
   int get_action_id( util::string_view name );
   int get_dot_id( util::string_view name );
   cooldown_waste_data_t* get_cooldown_waste_data( const cooldown_t* cd );
 
-
   // Virtual methods
   virtual void invalidate_cache( cache_e c );
   virtual void init();
-  virtual void validate_sim_options() {}
+  virtual void validate_sim_options()
+  {
+  }
   virtual bool validate_fight_style( fight_style_e ) const
-  { return true; }
+  {
+    return true;
+  }
   virtual bool validate_actor()
-  { return true; }
+  {
+    return true;
+  }
   virtual void init_meta_gem();
   virtual void init_resources( bool force = false );
   virtual std::vector<std::string> get_item_actions();
@@ -1161,7 +1288,7 @@ public:
   virtual void init_professions();
   virtual void init_spells();
   virtual void init_items();
-  virtual void init_azerite(); /// Initialize azerite-related support structures for the actor
+  virtual void init_azerite();  /// Initialize azerite-related support structures for the actor
   virtual void init_weapon( weapon_t& );
   virtual void init_base_stats();
   virtual void init_initial_stats();
@@ -1178,11 +1305,14 @@ public:
   /// any proc objects (e.g., dbc_proc_callback_t-derived objects) are initialized.
   virtual void init_special_effect( special_effect_t& effect );
   virtual void init_scaling();
-  virtual void init_action_list() {}
+  virtual void init_action_list()
+  {
+  }
   virtual void init_blizzard_action_list();
   virtual std::vector<std::string> action_names_from_spell_id( unsigned int spell_id ) const;
   virtual std::string aura_expr_from_spell_id( unsigned int spell_id, bool on_self = true ) const;
-  virtual void parse_assisted_combat_step( const assisted_combat_step_data_t& step, action_priority_list_t* assisted_combat );
+  virtual void parse_assisted_combat_step( const assisted_combat_step_data_t& step,
+                                           action_priority_list_t* assisted_combat );
 
   virtual parsed_assisted_combat_rule_t parse_assisted_combat_rule( const assisted_combat_rule_data_t& rule,
                                                                     const assisted_combat_step_data_t& step ) const;
@@ -1201,8 +1331,8 @@ public:
   virtual void init_finished();
   virtual void add_precombat_buff_state( buff_t* buff, int stacks, double value, timespan_t duration );
   virtual void add_precombat_cooldown_state( cooldown_t* cd, timespan_t duration );
-  virtual void apply_affecting_auras(action_t&);
-  virtual void action_init_finished(action_t&);
+  virtual void apply_affecting_auras( action_t& );
+  virtual void action_init_finished( action_t& );
   virtual bool verify_use_items() const;
   virtual void reset();
   virtual void combat_begin();
@@ -1213,7 +1343,9 @@ public:
   virtual void datacollection_end();
 
   /// Single actor batch mode calls this every time the active (player) actor changes for all targets
-  virtual void actor_changed() { }
+  virtual void actor_changed()
+  {
+  }
   virtual void activate();
   virtual void deactivate();
   virtual int level() const;
@@ -1230,7 +1362,9 @@ public:
   virtual double composite_melee_hit() const;
   virtual double composite_melee_crit_chance() const;
   virtual double composite_melee_crit_chance_multiplier() const
-  { return 1.0; }
+  {
+    return 1.0;
+  }
   virtual double composite_melee_expertise( const weapon_t* w = nullptr ) const;
   virtual double composite_spell_haste() const;
   virtual double composite_spell_cast_speed() const;
@@ -1238,7 +1372,9 @@ public:
   virtual double composite_total_spell_power( school_e school ) const;
   virtual double composite_spell_crit_chance() const;
   virtual double composite_spell_crit_chance_multiplier() const
-  { return 1.0; }
+  {
+    return 1.0;
+  }
   virtual double composite_spell_hit() const;
   virtual double composite_mastery() const;
   virtual double composite_mastery_value() const;
@@ -1253,8 +1389,8 @@ public:
   virtual double composite_total_corruption() const;
   virtual double composite_armor() const;
   virtual double composite_bonus_armor() const;
-  virtual double composite_base_armor_multiplier() const; // Modify Base Besistance
-  virtual double composite_armor_multiplier() const; // Modify Armor%, affects everything
+  virtual double composite_base_armor_multiplier() const;  // Modify Base Besistance
+  virtual double composite_armor_multiplier() const;       // Modify Armor%, affects everything
   virtual double composite_miss() const;
   virtual double composite_dodge() const;
   virtual double composite_parry() const;
@@ -1264,14 +1400,23 @@ public:
   virtual double composite_crit_avoidance() const;
   virtual double composite_attack_power_multiplier() const;
   virtual double composite_spell_power_multiplier() const;
-  virtual double matching_gear_multiplier( attribute_e /* attr */ ) const { return 0; }
+  virtual double matching_gear_multiplier( attribute_e /* attr */ ) const
+  {
+    return 0;
+  }
   /// Player-wide school based multipliers
   virtual double composite_player_multiplier( school_e ) const;
   /// Persistent multipliers that are snapshot at the beginning of the spell application/execution
-  virtual double composite_persistent_multiplier( school_e ) const { return 1.0; }
+  virtual double composite_persistent_multiplier( school_e ) const
+  {
+    return 1.0;
+  }
   virtual double composite_player_target_multiplier( player_t*, school_e school ) const;
   virtual double composite_player_heal_multiplier( const action_state_t* s ) const;
-  virtual double composite_player_dh_multiplier( school_e ) const { return 1.0; }
+  virtual double composite_player_dh_multiplier( school_e ) const
+  {
+    return 1.0;
+  }
   virtual double composite_player_th_multiplier( school_e ) const;
   virtual double composite_player_absorb_multiplier( const action_state_t* s ) const;
   virtual double composite_player_pet_damage_multiplier( const action_state_t*, bool guardian ) const;
@@ -1281,9 +1426,13 @@ public:
   virtual double composite_player_critical_healing_multiplier() const;
   virtual double composite_player_target_armor( player_t* ) const;
   virtual double composite_player_healing_received_multiplier() const
-  { return 1.0; }
+  {
+    return 1.0;
+  }
   virtual double composite_player_absorb_received_multiplier() const
-  { return 1.0; }
+  {
+    return 1.0;
+  }
   virtual double composite_mitigation_multiplier( school_e ) const;
   virtual double non_stacking_movement_modifier() const;
   virtual double stacking_movement_modifier() const;
@@ -1293,53 +1442,99 @@ public:
   virtual double composite_rating_multiplier( rating_e /* rating */ ) const;
   virtual double composite_rating( rating_e rating ) const;
   virtual double composite_spell_hit_rating() const
-  { return composite_rating( RATING_SPELL_HIT ); }
+  {
+    return composite_rating( RATING_SPELL_HIT );
+  }
   virtual double composite_spell_crit_rating() const
-  { return composite_rating( RATING_SPELL_CRIT ); }
+  {
+    return composite_rating( RATING_SPELL_CRIT );
+  }
   virtual double composite_spell_haste_rating() const
-  { return composite_rating( RATING_SPELL_HASTE ); }
+  {
+    return composite_rating( RATING_SPELL_HASTE );
+  }
   virtual double composite_melee_hit_rating() const
-  { return composite_rating( RATING_MELEE_HIT ); }
+  {
+    return composite_rating( RATING_MELEE_HIT );
+  }
   virtual double composite_melee_crit_rating() const
-  { return composite_rating( RATING_MELEE_CRIT ); }
+  {
+    return composite_rating( RATING_MELEE_CRIT );
+  }
   virtual double composite_melee_haste_rating() const
-  { return composite_rating( RATING_MELEE_HASTE ); }
+  {
+    return composite_rating( RATING_MELEE_HASTE );
+  }
   virtual double composite_ranged_hit_rating() const
-  { return composite_rating( RATING_RANGED_HIT ); }
+  {
+    return composite_rating( RATING_RANGED_HIT );
+  }
   virtual double composite_ranged_crit_rating() const
-  { return composite_rating( RATING_RANGED_CRIT ); }
+  {
+    return composite_rating( RATING_RANGED_CRIT );
+  }
   virtual double composite_ranged_haste_rating() const
-  { return composite_rating( RATING_RANGED_HASTE ); }
+  {
+    return composite_rating( RATING_RANGED_HASTE );
+  }
   virtual double composite_mastery_rating() const
-  { return composite_rating( RATING_MASTERY ); }
+  {
+    return composite_rating( RATING_MASTERY );
+  }
   virtual double composite_expertise_rating() const
-  { return composite_rating( RATING_EXPERTISE ); }
+  {
+    return composite_rating( RATING_EXPERTISE );
+  }
   virtual double composite_dodge_rating() const
-  { return composite_rating( RATING_DODGE ); }
+  {
+    return composite_rating( RATING_DODGE );
+  }
   virtual double composite_parry_rating() const
-  { return composite_rating( RATING_PARRY ); }
+  {
+    return composite_rating( RATING_PARRY );
+  }
   virtual double composite_block_rating() const
-  { return composite_rating( RATING_BLOCK ); }
+  {
+    return composite_rating( RATING_BLOCK );
+  }
   virtual double composite_damage_versatility_rating() const
-  { return composite_rating( RATING_DAMAGE_VERSATILITY ); }
+  {
+    return composite_rating( RATING_DAMAGE_VERSATILITY );
+  }
   virtual double composite_heal_versatility_rating() const
-  { return composite_rating( RATING_HEAL_VERSATILITY ); }
+  {
+    return composite_rating( RATING_HEAL_VERSATILITY );
+  }
   virtual double composite_mitigation_versatility_rating() const
-  { return composite_rating( RATING_MITIGATION_VERSATILITY ); }
+  {
+    return composite_rating( RATING_MITIGATION_VERSATILITY );
+  }
   virtual double composite_leech_rating() const
-  { return composite_rating( RATING_LEECH ); }
+  {
+    return composite_rating( RATING_LEECH );
+  }
   virtual double composite_speed_rating() const
-  { return composite_rating( RATING_SPEED ); }
+  {
+    return composite_rating( RATING_SPEED );
+  }
   virtual double composite_avoidance_rating() const
-  { return composite_rating( RATING_AVOIDANCE ); }
+  {
+    return composite_rating( RATING_AVOIDANCE );
+  }
   virtual double composite_corruption_rating() const
-  { return composite_rating( RATING_CORRUPTION ); }
+  {
+    return composite_rating( RATING_CORRUPTION );
+  }
   virtual double composite_corruption_resistance_rating() const
-  { return composite_rating( RATING_CORRUPTION_RESISTANCE ); }
+  {
+    return composite_rating( RATING_CORRUPTION_RESISTANCE );
+  }
 
   /// Total activity time for this actor during the iteration
   virtual timespan_t composite_active_time() const
-  { return iteration_fight_length; }
+  {
+    return iteration_fight_length;
+  }
 
   virtual void interrupt();
   virtual void halt();
@@ -1356,11 +1551,11 @@ public:
   virtual void enter_combat();
   virtual void leave_combat();
   virtual timespan_t available() const;
-  virtual action_t* select_action( const action_priority_list_t&, execute_type type = execute_type::FOREGROUND, const action_t* context = nullptr );
+  virtual action_t* select_action( const action_priority_list_t&, execute_type type = execute_type::FOREGROUND,
+                                   const action_t* context = nullptr );
   virtual action_t* execute_action();
 
-
-  virtual void   regen( timespan_t periodicity = timespan_t::from_seconds( 0.25 ) );
+  virtual void regen( timespan_t periodicity = timespan_t::from_seconds( 0.25 ) );
   virtual double resource_gain( resource_e resource_type, double amount, gain_t* source = nullptr,
                                 action_t* action = nullptr );
   virtual double resource_loss( resource_e resource_type, double amount, gain_t* source = nullptr,
@@ -1368,14 +1563,18 @@ public:
   virtual void recalculate_resource_max( resource_e resource_type, gain_t* source = nullptr );
   // Check whether the player has enough of a given resource.
   // The caller needs to ensure current resources are up to date (in particular with dynamic regen).
-  virtual bool   resource_available( resource_e resource_type, double cost ) const;
+  virtual bool resource_available( resource_e resource_type, double cost ) const;
   /// Figure out if healing should be recorded
   virtual bool record_healing() const;
   virtual resource_e primary_resource() const
-  { return RESOURCE_NONE; }
-  virtual role_e   primary_role() const;
+  {
+    return RESOURCE_NONE;
+  }
+  virtual role_e primary_role() const;
   virtual stat_e convert_hybrid_stat( stat_e s ) const
-  { return s; }
+  {
+    return s;
+  }
   virtual stat_e normalize_by() const;
   virtual double health_percentage() const;
   virtual double max_health() const;
@@ -1393,9 +1592,12 @@ public:
   virtual void assess_heal( school_e, result_amount_type, action_state_t* );
   virtual void trigger_callbacks( proc_types, proc_types2, action_t*, action_state_t* );
 
-  virtual bool taunt( player_t* /* source */ ) { return false; }
+  virtual bool taunt( player_t* /* source */ )
+  {
+    return false;
+  }
 
-  virtual void  summon_pet( util::string_view name, timespan_t duration = timespan_t::zero() );
+  virtual void summon_pet( util::string_view name, timespan_t duration = timespan_t::zero() );
   virtual void dismiss_pet( util::string_view name );
 
   virtual std::unique_ptr<expr_t> create_expression( util::string_view expression_str );
@@ -1408,12 +1610,16 @@ public:
   virtual void copy_from( player_t* source );
 
   virtual action_t* create_action( util::string_view name, util::string_view options );
-  virtual void      create_pets() { }
-  virtual pet_t*    create_pet( util::string_view name,  util::string_view type = {} );
+  virtual void create_pets()
+  {
+  }
+  virtual pet_t* create_pet( util::string_view name, util::string_view type = {} );
 
-  virtual void armory_extensions( const std::string& /* region */, const std::string& /* server */, const std::string& /* character */,
+  virtual void armory_extensions( const std::string& /* region */, const std::string& /* server */,
+                                  const std::string& /* character */,
                                   cache::behavior_e /* behavior */ = cache::players() )
-  {}
+  {
+  }
 
   virtual void do_dynamic_regen( bool forced = false );
 
@@ -1421,23 +1627,33 @@ public:
    * Returns owner if available, otherwise the player itself.
    */
   virtual const player_t* get_owner_or_self() const
-  { return this; }
+  {
+    return this;
+  }
 
   player_t* get_owner_or_self()
-  { return const_cast<player_t*>(static_cast<const player_t*>(this) -> get_owner_or_self()); }
+  {
+    return const_cast<player_t*>( static_cast<const player_t*>( this )->get_owner_or_self() );
+  }
 
   // T18 Hellfire Citadel class trinket detection
   virtual bool has_t18_class_trinket() const;
 
   // Targetdata stuff
   virtual const actor_target_data_t* find_target_data( const player_t* /* target */ ) const
-  { return nullptr; }
+  {
+    return nullptr;
+  }
 
   virtual actor_target_data_t* get_target_data( player_t* /* target */ ) const
-  { return nullptr; }
+  {
+    return nullptr;
+  }
 
   // Opportunity to perform any stat fixups before analysis
-  virtual void pre_analyze_hook() {}
+  virtual void pre_analyze_hook()
+  {
+  }
 
   /* New stuff */
   virtual double composite_player_vulnerability( school_e ) const;
@@ -1449,38 +1665,54 @@ public:
   scaling_metric_data_t scaling_for_metric( enum scale_metric_e metric ) const;
 
   virtual action_t* create_proc_action( util::string_view /* name */, const special_effect_t& /* effect */ )
-  { return nullptr; }
+  {
+    return nullptr;
+  }
   virtual bool requires_data_collection() const;
 
   rng::rng_t& rng();
   rng::rng_t& rng() const;
   virtual timespan_t time_to_move() const;
-  virtual void trigger_movement( double distance, movement_direction_type);
+  virtual void trigger_movement( double distance, movement_direction_type );
   virtual void update_movement( timespan_t duration );
   virtual void teleport( double yards, timespan_t duration = timespan_t::zero() );
   virtual movement_direction_type movement_direction() const
-  { return current.movement_direction; }
+  {
+    return current.movement_direction;
+  }
 
   virtual void cancel_auto_attacks();
   virtual void reset_auto_attacks( timespan_t delay = timespan_t::zero(), proc_t* proc = nullptr );
   virtual void delay_auto_attacks( timespan_t delay, proc_t* proc = nullptr );
   virtual void delay_ranged_auto_attacks( timespan_t delay, proc_t* proc = nullptr );
   virtual bool may_benefit_from_skyfury() const
-  { return true; }
+  {
+    return true;
+  }
 
   virtual void acquire_target( retarget_source /* event */, player_t* /* context */ = nullptr );
 
   // Various default values for the actor
   virtual std::string default_potion() const
-  { return ""; }
+  {
+    return "";
+  }
   virtual std::string default_flask() const
-  { return ""; }
+  {
+    return "";
+  }
   virtual std::string default_food() const
-  { return ""; }
+  {
+    return "";
+  }
   virtual std::string default_rune() const
-  { return ""; }
+  {
+    return "";
+  }
   virtual std::string default_temporary_enchant() const
-  { return ""; }
+  {
+    return "";
+  }
 
   /**
    * Default attack power type to use for value computation.
@@ -1490,12 +1722,15 @@ public:
    * the value calculation of the ability.
    */
   virtual attack_power_type default_ap_type() const
-  { return attack_power_type::DEFAULT; }
+  {
+    return attack_power_type::DEFAULT;
+  }
 
   // JSON Report extension. Overridable in class methods. Root element is an object assigned for
   // each JSON player object under "custom" property.
   virtual void output_json_report( js::JsonOutput& /* root */ ) const
-  { }
+  {
+  }
 
 private:
   std::vector<unsigned> active_dots;
@@ -1534,7 +1769,7 @@ public:
   assessor::state_assessor_pipeline_t assessor_out_damage;
 
   /// Start-of-combat effects
-  using combat_begin_fn_t = std::function<void(player_t*)>;
+  using combat_begin_fn_t = std::function<void( player_t* )>;
   std::vector<combat_begin_fn_t> combat_begin_functions;
   std::vector<combat_begin_fn_t> precombat_begin_functions;
 
