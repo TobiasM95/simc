@@ -1,0 +1,63 @@
+# Raidbots-Generated Simc Input - "Catsavage" from "https://www.raidbots.com/simbot/report/5Ed18oxVPo2FqDKKC4xvJU"
+# on 2025-12-05T08:54:00.986Z
+
+# simc.exe tww_st_feral.simc html=1 output=output.html
+
+# html="./output.html"
+# output="./output.txt"
+
+max_time=300
+# vary_combat_length=0.2
+# fixed_time=1
+iterations=1
+fight_style=Patchwerk
+# desired_error=0.02
+threads=1
+# calculate_scale_factors=0
+# report_details=1
+# debug=1
+
+druid=Catsavage
+level=80
+race=night_elf
+region=eu
+server=ravencrest
+role=melee
+spec=feral
+talents=CcGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAmBmZZmZMzsNbjx2MmxMzAAAAAAsFMbwYmRNjZhlZmxYGDAAAAAAYgBAAAQzsMLzMbzsNzSzyMLbwMDALmBD
+
+head=,id=237682,bonus_id=10356/12231/6652/12676/12365/13446/1540/10255,context=6,gem_id=213743
+neck=,id=178827,bonus_id=10390/6652/10383/10879/10396/12361/10255/13446/10039,context=35,gem_id=213470/213470
+shoulder=,id=237680,bonus_id=6652/10356/12233/12675/13446/1540/10255,context=6
+back=,id=235499,bonus_id=12401/9893/12256,context=11,enchant_id=7403,gem_id=238046
+chest=,id=237685,bonus_id=6652/10390/12229/12676/13446/1540/10255,context=35,enchant_id=7364
+wrist=,id=219334,bonus_id=10421/9633/8902/9627/12053/11304/8960/8793/12050/12922/13468,context=13,enchant_id=7391,gem_id=213470,crafted_stats=36/32
+hands=,id=237683,bonus_id=12675/1540/13446
+waist=,id=219331,bonus_id=10421/9633/8902/12053/12050/1485/13468/1808/8792/11303/8960,gem_id=213470,crafted_stats=49/36
+legs=,id=237681,bonus_id=6652/10389/12232/12676/13446/1540/10255,context=53,enchant_id=7601
+feet=,id=243306,bonus_id=6652/12239/10356/13504/13446/1540/10255,context=6,enchant_id=7418
+finger1=,id=237567,bonus_id=6652/10356/12360/10255/10879/10396/13446/1540,context=6,enchant_id=7340,gem_id=213473/213458
+finger2=,id=178824,bonus_id=10039/13446/12239/8781,enchant_id=7340,gem_id=213482/213497
+trinket1=,id=232541,bonus_id=10390/6652/10383/13446/1566/10255,context=35
+trinket2=,id=242402,bonus_id=6652/10356/13446/1540/10255,context=6
+main_hand=,id=221159,bonus_id=10390/6652/10384/13446/3222/10255,context=14,enchant_id=7445
+
+### Gear in Bags (Reconstructed by Top Gear, may not be perfect)
+# finger1=,id=215135,bonus_id=10421/9633/8902/10879/10396/9627/12050/8793/12053/13468,context=13,enchant_id=7340,gem_id=213491/213482,crafted_stats=49/36
+# neck=,id=178827,bonus_id=10390/6652/10383/10879/10396/12361/10255/13446/10039,context=35,gem_id=213473/213473
+# wrist=,id=219334,bonus_id=10421/9633/8902/9627/12053/11304/8960/8793/12050/12922/13468,context=13,enchant_id=7391,gem_id=213473,crafted_stats=36/32
+# waist=,id=219331,bonus_id=10421/9633/8902/12053/12050/1485/13468/1808/8792/11303/8960,gem_id=213473,crafted_stats=49/36
+# finger1=,id=215135,bonus_id=10421/9633/8902/10879/10396/9627/12050/8793/12053/13468,context=13,enchant_id=7340,gem_id=213473/213473,crafted_stats=49/36
+# finger2=,id=237567,bonus_id=6652/10356/12360/10255/10879/10396/13446/1540,context=6,enchant_id=7346,gem_id=213473/213473
+# head=,id=237682,bonus_id=10356/12231/6652/12676/12365/13446/1540/10255,context=6,gem_id=213458
+# wrist=,id=219334,bonus_id=10421/9633/8902/9627/12053/11304/8960/8793/12050/12922/13468,context=13,enchant_id=7391,gem_id=213467,crafted_stats=36/32
+# hands=,id=219333,bonus_id=10421/9633/8902/9627/12053/11303/8960/8791/12050/13468,context=13,crafted_stats=40/36
+# waist=,id=237533,bonus_id=6652/12921/12239/10356/12358/10255/13446/1540,context=6
+# finger1=,id=215135,bonus_id=10421/9633/8902/10879/10396/9627/12050/8793/12053/13468,context=13,enchant_id=7340,gem_id=213494/213482,crafted_stats=49/36
+# finger2=,id=237567,bonus_id=6652/10356/12360/10255/10879/10396/13446/1540,context=6,enchant_id=7346,gem_id=213494/213746
+# neck=,id=178827,bonus_id=10390/6652/10383/10879/10396/12361/10032/10255,context=35,gem_id=213473/213473
+# wrist=,id=219334,bonus_id=10421/9633/8902/9627/12053/11304/8960/8793/12050/12922/13469,context=13,enchant_id=7391,gem_id=213467,crafted_stats=36/32
+# waist=,id=237533,bonus_id=6652/12921/12239/10356/12358/1524/10255,context=6
+# finger1=,id=215135,bonus_id=10421/9633/8902/10879/10396/9627/12050/8793/12053,context=13,enchant_id=7340,gem_id=213494/213482,crafted_stats=49/36
+# finger2=,id=237567,bonus_id=6652/10356/12360/1530/10255/10879/10396,context=6,enchant_id=7346,gem_id=213494/213746
+# shirt=,id=138385,context=14
