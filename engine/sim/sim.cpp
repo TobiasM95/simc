@@ -20,6 +20,7 @@
 #include "report/highchart.hpp"
 #include "report/json/report_configuration.hpp"
 #include "report/reports.hpp"
+#include "rl/rl_interface.hpp"
 #include "sim/cooldown.hpp"
 #include "sim/event.hpp"
 #include "sim/expressions.hpp"
@@ -1547,6 +1548,7 @@ sim_t::sim_t()
     rl_enable( true ),
     rl_trace( true ),
     rl_trace_file( "rl_trace.jsonl" ),
+    rl_stdio( true ),
     // Multi-Threading
     threads( 0 ),
     thread_index( 0 ),
@@ -1994,6 +1996,22 @@ void sim_t::combat_end()
 
   if ( iterations == 1 || current_iteration >= 1 )
     datacollection_end();
+
+  // Write episode termination signal for RL stdio bridge
+  if ( rl_stdio && rl_enable )
+  {
+    // Get total damage from primary player (first non-enemy player)
+    double total_damage = 0.0;
+    for ( auto* p : player_no_pet_list )
+    {
+      if ( !p->is_enemy() )
+      {
+        total_damage = p->priority_iteration_dmg;
+        break;
+      }
+    }
+    rl::write_episode_end( total_damage, current_time().total_seconds() );
+  }
 
   // assert( active_enemies == 0 );
   // assert( active_allies == 0 );
@@ -3822,6 +3840,7 @@ void sim_t::create_options()
   add_option( opt_bool( "rl_enable", rl_enable ) );
   add_option( opt_bool( "rl_trace", rl_trace ) );
   add_option( opt_string( "rl_trace_file", rl_trace_file ) );
+  add_option( opt_bool( "rl_stdio", rl_stdio ) );
   // Regen
   add_option( opt_timespan( "regen_periodicity", regen_periodicity ) );
   // RNG
@@ -4372,6 +4391,13 @@ void sim_t::setup( sim_control_t* c )
     if ( !debug_each )
       iterations = 1;
 
+    threads = 1;
+  }
+
+  // Force single-threaded execution for RL stdio bridge mode
+  // to avoid concurrent stdin/stdout access issues
+  if ( rl_stdio && rl_enable )
+  {
     threads = 1;
   }
 

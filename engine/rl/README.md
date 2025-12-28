@@ -109,6 +109,64 @@ rl_enable=1
 
 This routes action selection through the RL policy callback instead of the APL.
 
+## Python Bridge (Gymnasium/Masked PPO)
+
+The `rl_bridge.py` module provides a Gymnasium-compatible environment that communicates with simc via stdin/stdout.
+
+### Quick Start
+
+```bash
+# Run simc with stdio bridge
+./simc Feral.simc rl_enable=1 rl_stdio=1 rl_trace=0 iterations=1
+
+# Or use the Python wrapper
+python engine/rl/rl_bridge.py --simc ./simc --profile Feral.simc
+```
+
+### Using with Stable-Baselines3 MaskablePPO
+
+```python
+from sb3_contrib import MaskablePPO
+from engine.rl.rl_bridge import SimcEnv, make_vec_env
+
+# Single environment
+env = SimcEnv(simc_path="./simc", profile="Feral.simc")
+
+# Or parallel environments for faster training
+envs = make_vec_env(8, simc_path="./simc", profile="Feral.simc")
+
+# Train with MaskablePPO (action masking)
+model = MaskablePPO("MlpPolicy", envs, verbose=1)
+model.learn(total_timesteps=100000)
+```
+
+### Stdio Bridge Protocol
+
+When `rl_stdio=1` is enabled:
+
+1. **State message** (simc → Python): JSON line with observation
+
+   ```json
+   {"type":"step","t":1.5,"time_rem":298.5,"time_rem_n":0.995,"gcd_rem":0,"gcd_rem_n":0,"ttd":298.5,"ttd_n":0.995,"reward":12345.67,"resource_pct":[...],"n":25,"mask":[1,0,1,...],"labels":["fireball",...],"cd_rem_s":[...],"cd_rem_n":[...],"cd_charges_f":[...]}
+   ```
+
+2. **Action message** (Python → simc): Single integer (action index)
+
+   ```
+   3
+   ```
+
+3. **Episode end** (simc → Python): JSON line with done signal
+   ```json
+   { "type": "done", "total_damage": 1234567.89, "fight_length": 300.0 }
+   ```
+
+### Options
+
+- `rl_stdio=1` - Enable stdin/stdout bridge (forces `threads=1`)
+- `rl_trace=0` - Disable file tracing when using stdio (recommended)
+- `iterations=N` - Run N episodes before simc exits
+
 ## Policy API
 
 ```cpp
@@ -119,11 +177,7 @@ void set_policy(policy_fn_t fn, void* user_data = nullptr);
 
 The policy receives the full step input and returns an action index. If the chosen action is illegal, the engine falls back to the first legal action.
 
-## Intended next step (Python bridge)
+### Built-in Policies
 
-The API is shaped for easy IPC:
-
-- Serialize step_input_t to JSON/binary
-- Send to Python over pipe/socket
-- Receive action index
-- Return to engine
+- `dummy_policy` - Round-robin through legal actions (default for testing)
+- `stdio_policy` - Reads/writes JSON via stdin/stdout (enabled by `rl_stdio=1`)

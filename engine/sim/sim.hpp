@@ -637,6 +637,10 @@ struct sim_t : private sc_thread_t
   bool rl_trace;
   std::string rl_trace_file;
 
+  // Experimental: enable stdin/stdout bridge for external RL policy (e.g., Python).
+  // When enabled, forces threads=1 and communicates via JSON over stdio.
+  bool rl_stdio;
+
   // Multi-Threading
   mutex_t merge_mutex;
   int threads;

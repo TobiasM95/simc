@@ -14308,6 +14308,12 @@ action_t* player_t::select_action( const action_priority_list_t& list, execute_t
       {
         rl_wait_actions.push_back( new rl_wait_action_t( this, rl::get_wait_pseudo_action_duration( i ) ) );
       }
+
+      // If stdio bridge is enabled, activate the stdio policy
+      if ( sim->rl_stdio )
+      {
+        rl::set_policy( &rl::stdio_policy, nullptr );
+      }
     }
 
     // Update mask and features for current state

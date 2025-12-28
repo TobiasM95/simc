@@ -1,0 +1,9 @@
+# Requirements for SimulationCraft RL Bridge
+# Install with: pip install -r requirements.txt
+
+gymnasium>=0.29.0
+numpy>=1.24.0
+
+# For training with Masked PPO (action masking support)
+stable-baselines3>=2.0.0
+sb3-contrib>=2.0.0

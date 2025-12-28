@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <iostream>
+#include <mutex>
 #include <set>
 
 namespace
@@ -112,6 +114,9 @@ io::ofstream* get_trace_stream( const sim_t& sim )
 rl::policy_fn_t g_policy = &rl::dummy_policy;
 void* g_policy_user_data = nullptr;
 
+// Mutex for stdio operations (stdin/stdout) to ensure thread-safety
+std::mutex g_stdio_mutex;
+
 double clamp01( double x )
 {
   return std::max( 0.0, std::min( 1.0, x ) );
@@ -163,6 +168,124 @@ std::size_t dummy_policy( const step_input_t& input, void* /*user_data*/ )
 
   static thread_local uint64_t tl_counter = 0;
   return legal[ ( tl_counter++ ) % legal.size() ];
+}
+
+// ============================================================================
+// Stdio bridge policy (for external Python RL agents)
+// ============================================================================
+namespace
+{
+void write_step_json_to_stream( std::ostream& out, const step_input_t& input )
+{
+  out << "{";
+  out << "\"type\":\"step\",";
+  out << "\"t\":" << input.observation.time_s << ",";
+  out << "\"fight_len\":" << input.observation.fight_length_s << ",";
+  out << "\"time_rem\":" << input.observation.time_remaining_s << ",";
+  out << "\"time_rem_n\":" << input.observation.time_remaining_norm << ",";
+  out << "\"ttd\":" << input.observation.target_ttd_s << ",";
+  out << "\"ttd_n\":" << input.observation.target_ttd_norm << ",";
+  out << "\"gcd_rem\":" << input.observation.gcd_remaining_s << ",";
+  out << "\"gcd_rem_n\":" << input.observation.gcd_remaining_norm << ",";
+  out << "\"reward\":" << input.reward << ",";
+
+  // Resources
+  out << "\"resource_pct\":[";
+  for ( std::size_t i = 0; i < input.observation.resource_pct.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.observation.resource_pct[ i ];
+  }
+  out << "],";
+
+  // Action space
+  out << "\"n\":" << input.action_space.actions.size() << ",";
+
+  out << "\"mask\":[";
+  for ( std::size_t i = 0; i < input.action_space.action_mask.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << static_cast<int>( input.action_space.action_mask[ i ] );
+  }
+  out << "],";
+
+  out << "\"labels\":[";
+  for ( std::size_t i = 0; i < input.action_space.action_labels.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << "\"" << json_escape( input.action_space.action_labels[ i ] ) << "\"";
+  }
+  out << "],";
+
+  out << "\"cd_rem_s\":[";
+  for ( std::size_t i = 0; i < input.action_space.cooldown_remains_s.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.action_space.cooldown_remains_s[ i ];
+  }
+  out << "],";
+
+  out << "\"cd_rem_n\":[";
+  for ( std::size_t i = 0; i < input.action_space.cooldown_remains_norm.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.action_space.cooldown_remains_norm[ i ];
+  }
+  out << "],";
+
+  out << "\"cd_charges_f\":[";
+  for ( std::size_t i = 0; i < input.action_space.cooldown_charges_frac.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.action_space.cooldown_charges_frac[ i ];
+  }
+  out << "]";
+
+  out << "}\n";
+  out.flush();
+}
+}  // anonymous namespace
+
+std::size_t stdio_policy( const step_input_t& input, void* /*user_data*/ )
+{
+  std::lock_guard<std::mutex> lock( g_stdio_mutex );
+
+  // Write state as JSON line to stdout
+  write_step_json_to_stream( std::cout, input );
+
+  // Read action index from stdin
+  std::size_t action_index = input.action_space.actions.size();  // Default to invalid (no action)
+  if ( std::cin >> action_index )
+  {
+    // Validate action is legal
+    if ( action_index < input.action_space.action_mask.size() && input.action_space.action_mask[ action_index ] )
+    {
+      return action_index;
+    }
+  }
+
+  // Fallback: return first legal action
+  for ( std::size_t i = 0; i < input.action_space.action_mask.size(); ++i )
+  {
+    if ( input.action_space.action_mask[ i ] )
+      return i;
+  }
+
+  return input.action_space.actions.size();
+}
+
+void write_episode_end( double total_damage, double fight_length_s )
+{
+  std::lock_guard<std::mutex> lock( g_stdio_mutex );
+  std::cout << "{\"type\":\"done\",\"total_damage\":" << total_damage << ",\"fight_length\":" << fight_length_s
+            << "}\n";
+  std::cout.flush();
 }
 
 // ============================================================================

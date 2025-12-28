@@ -87,6 +87,14 @@ void set_policy( policy_fn_t fn, void* user_data = nullptr );
 
 std::size_t dummy_policy( const step_input_t& input, void* user_data );
 
+/// Stdio bridge policy: writes state JSON to stdout, reads action index from stdin.
+/// Use with rl_stdio=1 option. Requires single-threaded execution (threads=1).
+std::size_t stdio_policy( const step_input_t& input, void* user_data );
+
+/// Write episode termination signal to stdout (for stdio bridge mode).
+/// Called at the end of each iteration when rl_stdio is enabled.
+void write_episode_end( double total_damage, double fight_length_s );
+
 // ============================================================================
 // Action space building (APL-independent, uses player_t::action_list)
 // ============================================================================
