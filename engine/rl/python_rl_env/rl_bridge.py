@@ -36,6 +36,10 @@ import numpy as np
 from gymnasium import spaces
 
 
+# Base GCD for normalization (1.5 seconds is the default GCD before haste)
+BASE_GCD_SECONDS = 1.5
+
+
 class SimcEnv(gym.Env):
     """
     Gymnasium environment that wraps SimulationCraft with RL stdio bridge.
@@ -45,12 +49,15 @@ class SimcEnv(gym.Env):
 
     Observation Space:
         A dictionary containing:
-        - "obs": Box of continuous features (time, resources, cooldowns, etc.)
+        - "obs": Box of continuous features:
+            [gcd_rem_norm, ttd_norm] + resource_pct[18] + cd_charges_f[n_actions]
+            where normalized values are computed using initial TTD and base GCD.
         - "mask": MultiBinary action mask (1 = legal, 0 = illegal)
 
     Action Space:
         Discrete(n) where n is the number of possible actions.
         Actions are masked - only actions with mask[i]=1 are valid.
+        Actions can be filtered using the action_blacklist parameter.
     """
 
     metadata = {"render_modes": []}
@@ -64,6 +71,7 @@ class SimcEnv(gym.Env):
         iterations: int = 1,
         seed: Optional[int] = None,
         intermediate_rewards: bool = False,
+        action_blacklist: Optional[set[str]] = None,
     ):
         """
         Initialize the SimulationCraft RL environment.
@@ -76,6 +84,8 @@ class SimcEnv(gym.Env):
             iterations: Number of iterations per episode (typically 1 for RL).
             seed: Random seed for reproducibility.
             intermediate_rewards: Whether to use intermediate rewards.
+            action_blacklist: Set of action label names to exclude from the action
+                space (e.g., {"invoke_external_buff", "snapshot_stats"}).
         """
         super().__init__()
 
@@ -86,31 +96,34 @@ class SimcEnv(gym.Env):
         self.iterations = iterations
         self.seed_value = seed
         self.intermediate_rewards = intermediate_rewards
+        self._action_blacklist: set[str] = action_blacklist or set()
 
         self._process: Optional[subprocess.Popen] = None
-        self._action_labels: list[str] = []
-        self._num_actions: int = 0
         self._num_resources = 18  # RESOURCE_MAX in simc
 
+        # Action space mapping (filtered -> raw simc index)
+        self._action_index_map: list[int] = []  # Maps filtered index to raw simc index
+        self._filtered_labels: list[str] = []  # Labels after blacklist filtering
+        self._num_actions: int = 0  # Number of filtered actions
+        self._raw_num_actions: int = 0  # Original number of actions from simc
+
+        # Initial TTD for normalization (captured from first observation)
+        self._initial_ttd: Optional[float] = None
+
         # Observation space: continuous features
-        # [time_remaining_norm, gcd_remaining_norm, ttd_norm, 18 resources, n*3 action features]
+        # [gcd_rem_norm, ttd_norm] + resource_pct[18] + cd_charges_f[n_actions]
         # We'll set the actual size after first step when we know num_actions
         self._obs_dim = (
-            3 + self._num_resources
+            2 + self._num_resources
         )  # Base dimensions (before action features)
-
-        # Placeholder spaces - will be updated after first message
-        self.observation_space = spaces.Dict(
-            {
-                "obs": spaces.Box(low=0.0, high=1.0, shape=(128,), dtype=np.float32),
-                "mask": spaces.MultiBinary(64),
-            }
-        )
-        self.action_space = spaces.Discrete(64)
 
         self._spaces_initialized = False
         self._current_state: Optional[dict] = None
         self._total_reward = 0.0
+
+        # Probe the simc process once to discover the actual action space size
+        # This is necessary because Gymnasium/SB3 expects fixed observation/action spaces
+        self._probe_action_space()
 
     def _build_command(self) -> list[str]:
         """Build the simc command line."""
@@ -136,6 +149,53 @@ class SimcEnv(gym.Env):
         cmd.extend(self.simc_args)
 
         return cmd
+
+    def _probe_action_space(self) -> None:
+        """
+        Probe simc to discover the actual action space size.
+
+        This runs a quick simulation to get the first state message,
+        which contains the action labels and space dimensions.
+        The process is then closed - actual training uses fresh processes.
+        """
+        self._start_process()
+        try:
+            msg = self._read_message()
+            if msg.get("type") == "done":
+                raise RuntimeError("Episode ended immediately during probe")
+
+            # Extract action space info and apply blacklist filtering
+            raw_num_actions = msg["n"]
+            raw_labels = msg.get(
+                "labels", [f"action_{i}" for i in range(raw_num_actions)]
+            )
+
+            self._raw_num_actions = raw_num_actions
+            self._action_index_map = []
+            self._filtered_labels = []
+
+            for i, label in enumerate(raw_labels):
+                if label not in self._action_blacklist:
+                    self._action_index_map.append(i)
+                    self._filtered_labels.append(label)
+
+            self._num_actions = len(self._filtered_labels)
+
+            # Now set the actual observation and action spaces
+            obs_dim = 2 + self._num_resources + self._num_actions
+            self.observation_space = spaces.Dict(
+                {
+                    "obs": spaces.Box(
+                        low=-1.0, high=10.0, shape=(obs_dim,), dtype=np.float32
+                    ),
+                    "mask": spaces.MultiBinary(self._num_actions),
+                }
+            )
+            self.action_space = spaces.Discrete(self._num_actions)
+            self._spaces_initialized = True
+
+        finally:
+            self._close_process()
 
     def _start_process(self) -> None:
         """Start the simc subprocess."""
@@ -192,46 +252,62 @@ class SimcEnv(gym.Env):
         self._process.stdin.write(f"{action}\n")
         self._process.stdin.flush()
 
-    def _parse_state(self, msg: dict) -> tuple[dict, np.ndarray]:
+    def _parse_state(
+        self, msg: dict, is_first: bool = False
+    ) -> tuple[dict, np.ndarray]:
         """
         Parse a state message from simc into observation dict and action mask.
+
+        Args:
+            msg: JSON message from simc containing state information.
+            is_first: Whether this is the first state (used to capture initial TTD).
 
         Returns:
             Tuple of (observation_dict, action_mask)
         """
-        # Update action space if needed
-        num_actions = msg["n"]
-        if not self._spaces_initialized or num_actions != self._num_actions:
-            self._num_actions = num_actions
-            self._action_labels = msg.get(
-                "labels", [f"action_{i}" for i in range(num_actions)]
+        # Capture initial TTD on first observation for normalization
+        if is_first:
+            self._initial_ttd = msg.get("ttd", self.fight_length)
+            if self._initial_ttd <= 0:
+                self._initial_ttd = self.fight_length
+
+        # Get raw action data from simc
+        raw_num_actions = msg["n"]
+        raw_mask = msg["mask"]
+        raw_cd_charges = msg["cd_charges_f"]
+
+        # Validate that action count matches what we probed during init
+        if raw_num_actions != self._raw_num_actions:
+            raise RuntimeError(
+                f"Action count mismatch: expected {self._raw_num_actions} but got "
+                f"{raw_num_actions}. The simc profile may have changed."
             )
 
-            # Observation: base features + per-action features (cd_rem_n, cd_charges_f)
-            obs_dim = 3 + self._num_resources + num_actions * 2
-            self.observation_space = spaces.Dict(
-                {
-                    "obs": spaces.Box(
-                        low=-1.0, high=10.0, shape=(obs_dim,), dtype=np.float32
-                    ),
-                    "mask": spaces.MultiBinary(num_actions),
-                }
-            )
-            self.action_space = spaces.Discrete(num_actions)
-            self._spaces_initialized = True
+        # Build filtered mask and cd_charges
+        filtered_mask = [raw_mask[i] for i in self._action_index_map]
+        filtered_cd_charges = [raw_cd_charges[i] for i in self._action_index_map]
+
+        # Compute normalized values internally using initial TTD and base GCD
+        gcd_rem = msg.get("gcd_rem", 0.0)
+        ttd = msg.get("ttd", self._initial_ttd)
+
+        gcd_rem_norm = gcd_rem / BASE_GCD_SECONDS if BASE_GCD_SECONDS > 0 else 0.0
+        ttd_norm = (
+            ttd / self._initial_ttd
+            if self._initial_ttd and self._initial_ttd > 0
+            else 0.0
+        )
 
         # Build observation vector
         obs_parts = [
-            msg["time_rem_n"],
-            msg["gcd_rem_n"],
-            msg["ttd_n"],
+            gcd_rem_norm,
+            ttd_norm,
         ]
         obs_parts.extend(msg["resource_pct"])
-        obs_parts.extend(msg["cd_rem_n"])
-        obs_parts.extend(msg["cd_charges_f"])
+        obs_parts.extend(filtered_cd_charges)
 
         obs = np.array(obs_parts, dtype=np.float32)
-        mask = np.array(msg["mask"], dtype=np.int8)
+        mask = np.array(filtered_mask, dtype=np.int8)
 
         return {"obs": obs, "mask": mask}, mask
 
@@ -256,6 +332,9 @@ class SimcEnv(gym.Env):
         if seed is not None:
             self.seed_value = seed
 
+        # Reset initial TTD for new episode (used for normalization)
+        self._initial_ttd = None
+
         self._start_process()
         self._total_reward = 0.0
 
@@ -267,13 +346,13 @@ class SimcEnv(gym.Env):
             raise RuntimeError("Episode ended immediately after reset")
 
         self._current_state = msg
-        obs, mask = self._parse_state(msg)
+        obs, mask = self._parse_state(msg, is_first=True)
 
         info = {
             "mask": mask,
-            "action_labels": self._action_labels,
+            "action_labels": self._filtered_labels,
             "time": msg["t"],
-            "fight_length": msg["fight_len"],
+            "initial_ttd": self._initial_ttd,
         }
 
         return obs, info
@@ -284,6 +363,7 @@ class SimcEnv(gym.Env):
 
         Args:
             action: Index of the action to take (must be legal per current mask).
+                This is the filtered action index, not the raw simc index.
 
         Returns:
             Tuple of (observation, reward, terminated, truncated, info)
@@ -291,8 +371,15 @@ class SimcEnv(gym.Env):
         if self._process is None:
             raise RuntimeError("Environment not reset. Call reset() first.")
 
-        # Send action to simc
-        self._send_action(action)
+        # Translate filtered action index to raw simc action index
+        if action < 0 or action >= len(self._action_index_map):
+            raise ValueError(
+                f"Invalid action {action}. Must be in range [0, {len(self._action_index_map)})"
+            )
+        raw_action = self._action_index_map[action]
+
+        # Send raw action to simc
+        self._send_action(raw_action)
 
         # Read response
         msg = self._read_message()
@@ -325,7 +412,7 @@ class SimcEnv(gym.Env):
 
             info = {
                 "mask": obs["mask"],
-                "action_labels": self._action_labels,
+                "action_labels": self._filtered_labels,
                 "total_damage": total_damage,
                 "fight_length": fight_length,
                 "episode_end": True,
@@ -346,11 +433,11 @@ class SimcEnv(gym.Env):
 
         info = {
             "mask": mask,
-            "action_labels": self._action_labels,
+            "action_labels": self._filtered_labels,
             "time": msg["t"],
             "chosen_label": (
-                self._action_labels[action]
-                if action < len(self._action_labels)
+                self._filtered_labels[action]
+                if action < len(self._filtered_labels)
                 else "unknown"
             ),
         }
@@ -366,16 +453,21 @@ class SimcEnv(gym.Env):
         Return the current action mask (for compatibility with sb3-contrib MaskablePPO).
 
         Returns:
-            Boolean array where True = legal action.
+            Boolean array where True = legal action (using filtered action space).
         """
         if self._current_state is None:
             return np.ones(self._num_actions, dtype=bool)
-        return np.array(self._current_state.get("mask", []), dtype=bool)
+        # Return filtered mask based on action index mapping
+        raw_mask = self._current_state.get("mask", [])
+        if len(raw_mask) == 0 or len(self._action_index_map) == 0:
+            return np.ones(self._num_actions, dtype=bool)
+        filtered_mask = [raw_mask[i] for i in self._action_index_map]
+        return np.array(filtered_mask, dtype=bool)
 
     def get_action_label(self, action: int) -> str:
-        """Get the human-readable label for an action index."""
-        if 0 <= action < len(self._action_labels):
-            return self._action_labels[action]
+        """Get the human-readable label for a filtered action index."""
+        if 0 <= action < len(self._filtered_labels):
+            return self._filtered_labels[action]
         return f"action_{action}"
 
 
@@ -383,6 +475,7 @@ def make_simc_env(
     simc_path: str = "./simc",
     profile: Optional[str] = None,
     simc_args: Optional[list[str]] = None,
+    action_blacklist: Optional[set[str]] = None,
     **kwargs,
 ) -> SimcEnv:
     """
@@ -392,6 +485,7 @@ def make_simc_env(
         simc_path: Path to simc executable.
         profile: Path to .simc profile.
         simc_args: Additional simc arguments.
+        action_blacklist: Set of action label names to exclude from the action space.
         **kwargs: Additional arguments passed to SimcEnv.
 
     Returns:
@@ -401,6 +495,7 @@ def make_simc_env(
         simc_path=simc_path,
         profile=profile,
         simc_args=simc_args,
+        action_blacklist=action_blacklist,
         **kwargs,
     )
 
@@ -410,6 +505,7 @@ def make_vec_env(
     simc_path: str = "./simc",
     profile: Optional[str] = None,
     simc_args: Optional[list[str]] = None,
+    action_blacklist: Optional[set[str]] = None,
     **kwargs,
 ):
     """
@@ -423,6 +519,7 @@ def make_vec_env(
         simc_path: Path to simc executable.
         profile: Path to .simc profile.
         simc_args: Additional simc arguments.
+        action_blacklist: Set of action label names to exclude from the action space.
         **kwargs: Additional arguments passed to SimcEnv.
 
     Returns:
@@ -430,8 +527,9 @@ def make_vec_env(
 
     Example:
         >>> from sb3_contrib import MaskablePPO
-        >>> envs = make_vec_env(8, simc_path="./simc", profile="Feral.simc")
-        >>> model = MaskablePPO("MlpPolicy", envs, verbose=1)
+        >>> envs = make_vec_env(8, simc_path="./simc", profile="Feral.simc",
+        ...                     action_blacklist={"invoke_external_buff"})
+        >>> model = MaskablePPO("MultiInputPolicy", envs, verbose=1)
         >>> model.learn(total_timesteps=100000)
     """
     try:
@@ -448,6 +546,7 @@ def make_vec_env(
                 simc_path=simc_path,
                 profile=profile,
                 simc_args=simc_args,
+                action_blacklist=action_blacklist,
                 seed=seed,
                 **kwargs,
             )
@@ -458,19 +557,21 @@ def make_vec_env(
     return SubprocVecEnv([make_env(i) for i in range(num_envs)])
 
 
-if __name__ == "__main__":
+def run_demo(args):
+    """Run a simple demo of the SimcEnv with random actions."""
     # Simple test/demo
-    import argparse
 
-    parser = argparse.ArgumentParser(description="Test SimulationCraft RL Bridge")
-    parser.add_argument("--simc", default="./simc", help="Path to simc executable")
-    parser.add_argument("--profile", required=True, help="Path to .simc profile")
-    parser.add_argument(
-        "--episodes", type=int, default=1, help="Number of episodes to run"
+    env = SimcEnv(
+        simc_path=args.simc,
+        profile=args.profile,
+        action_blacklist={
+            "invoke_external_buff",
+            "snapshot_stats",
+            "cancel_buff",
+            "use_item_arazs_ritual_forge",
+            "do_treacherous_transmitter_task",
+        },
     )
-    args = parser.parse_args()
-
-    env = SimcEnv(simc_path=args.simc, profile=args.profile)
 
     for ep in range(args.episodes):
         print(f"\n=== Episode {ep + 1} ===")
@@ -497,7 +598,7 @@ if __name__ == "__main__":
 
             if step_count <= 5 or step_count % 100 == 0:
                 print(
-                    f"  Step {step_count}: action={env.get_action_label(action)}, reward={reward:.2f}"
+                    f"  Step {step_count}: action={env.get_action_label(action)}, reward={reward:.2f}, obs={obs}, truncated={truncated}, info={info}"
                 )
 
             if terminated or truncated:
@@ -507,3 +608,331 @@ if __name__ == "__main__":
 
     env.close()
     print("\nDone!")
+
+
+def run_single_thread_sb3(args):
+    from sb3_contrib import MaskablePPO
+
+    # Single environment
+    env = SimcEnv(
+        simc_path=args.simc,
+        profile=args.profile,
+        action_blacklist={
+            "invoke_external_buff",
+            "snapshot_stats",
+            "cancel_buff",
+            "use_item_arazs_ritual_forge",
+            "do_treacherous_transmitter_task",
+        },
+    )
+
+    # Train with MaskablePPO (action masking)
+    model = MaskablePPO("MultiInputPolicy", env, verbose=1)
+    model.learn(total_timesteps=1000000)
+
+
+def run_multi_thread_sb3(args):
+    import os
+    import pickle
+    import time
+    from pathlib import Path
+
+    from sb3_contrib import MaskablePPO
+    from stable_baselines3.common.callbacks import (
+        BaseCallback,
+        CallbackList,
+        CheckpointCallback,
+    )
+    from stable_baselines3.common.logger import configure
+    from stable_baselines3.common.monitor import Monitor
+    from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, VecNormalize
+
+    # === Configuration ===
+    num_envs = 12
+    total_timesteps = 100_000_000  # 100M steps for overnight training
+    save_freq = 50_000  # Save checkpoint every 50k steps
+    log_interval = 1  # Log every iteration
+
+    # Output directory - use resume directory or create new with timestamp
+    resume_dir = Path(args.resume) if args.resume else None
+    if resume_dir:
+        output_dir = resume_dir
+        if not output_dir.exists():
+            raise ValueError(f"Resume directory does not exist: {output_dir}")
+        print(f"=== SimC RL Training (RESUMING) ===")
+    else:
+        run_name = f"simc_ppo_{time.strftime('%Y%m%d_%H%M%S')}"
+        output_dir = Path("./training_runs") / run_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"=== SimC RL Training ===")
+
+    log_dir = output_dir / "logs"
+    model_dir = output_dir / "models"
+    log_dir.mkdir(exist_ok=True)
+    model_dir.mkdir(exist_ok=True)
+
+    print(f"Output directory: {output_dir}")
+    print(f"Num envs: {num_envs}")
+    print(f"Total timesteps: {total_timesteps:,}")
+
+    # === Environment Setup ===
+    action_blacklist = {
+        "invoke_external_buff",
+        "snapshot_stats",
+        "cancel_buff",
+        "use_item_arazs_ritual_forge",
+        "do_treacherous_transmitter_task",
+    }
+
+    def make_env(seed: int):
+        def _init():
+            env = SimcEnv(
+                simc_path=args.simc,
+                profile=args.profile,
+                action_blacklist=action_blacklist,
+                seed=seed,
+                intermediate_rewards=True,  # Enable intermediate rewards for learning signal
+            )
+            # Wrap with Monitor for episode stats (required for ep_rew_mean)
+            env = Monitor(env)
+            return env
+
+        return _init
+
+    print("Creating vectorized environments...")
+    envs = SubprocVecEnv([make_env(i) for i in range(num_envs)])
+
+    # Wrap with VecNormalize for reward normalization
+    # This is critical - raw rewards range from 50k to 10M+ per step
+    vec_normalize_path = model_dir / "vec_normalize.pkl"
+    if resume_dir and vec_normalize_path.exists():
+        print(f"Loading VecNormalize stats from {vec_normalize_path}")
+        envs = VecNormalize.load(str(vec_normalize_path), envs)
+        envs.training = True  # Ensure we continue updating stats
+    else:
+        envs = VecNormalize(
+            envs,
+            norm_obs=False,  # Don't normalize obs - already in [0,1] range
+            norm_reward=True,  # Normalize rewards - critical for learning
+            clip_reward=10.0,  # Clip to reasonable range
+            gamma=0.99,  # Discount for reward normalization
+        )
+
+    # === Custom Callback for Best Model & Metrics ===
+    class TrainingMetricsCallback(BaseCallback):
+        """
+        Custom callback that:
+        1. Tracks episode rewards and saves metrics to CSV
+        2. Saves the best model based on mean reward
+        3. Keeps only the latest checkpoint to save space
+        4. Saves VecNormalize stats alongside model checkpoints
+        """
+
+        def __init__(
+            self,
+            save_path: Path,
+            vec_normalize_env: VecNormalize,
+            check_freq: int = 1000,
+            verbose: int = 1,
+            resume: bool = False,
+        ):
+            super().__init__(verbose)
+            self.save_path = save_path
+            self.vec_normalize_env = vec_normalize_env
+            self.check_freq = check_freq
+            self.best_mean_reward = float("-inf")
+            self.episode_rewards = []
+            self.episode_lengths = []
+            self.metrics_file = save_path / "training_metrics.csv"
+            self._last_checkpoint_path = None
+
+            # Load previous best reward if resuming
+            if resume and self.metrics_file.exists():
+                try:
+                    import csv
+
+                    with open(self.metrics_file, "r") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            if row.get("best_reward"):
+                                self.best_mean_reward = float(row["best_reward"])
+                    print(
+                        f"Resuming with previous best reward: {self.best_mean_reward:.2f}"
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not load previous best reward: {e}")
+
+            # Initialize or append to CSV file
+            if not resume or not self.metrics_file.exists():
+                with open(self.metrics_file, "w") as f:
+                    f.write(
+                        "timesteps,episodes,ep_rew_mean,ep_rew_std,ep_len_mean,best_reward\n"
+                    )
+
+        def _on_step(self) -> bool:
+            # Collect episode info from monitor
+            if self.locals.get("infos"):
+                for info in self.locals["infos"]:
+                    if "episode" in info:
+                        self.episode_rewards.append(info["episode"]["r"])
+                        self.episode_lengths.append(info["episode"]["l"])
+
+            # Periodic logging and checkpointing
+            if self.n_calls % self.check_freq == 0 and len(self.episode_rewards) > 0:
+                mean_reward = np.mean(self.episode_rewards[-100:])  # Last 100 episodes
+                std_reward = np.std(self.episode_rewards[-100:])
+                mean_length = np.mean(self.episode_lengths[-100:])
+                num_episodes = len(self.episode_rewards)
+
+                # Log to CSV
+                with open(self.metrics_file, "a") as f:
+                    f.write(
+                        f"{self.num_timesteps},{num_episodes},{mean_reward:.2f},"
+                        f"{std_reward:.2f},{mean_length:.2f},{self.best_mean_reward:.2f}\n"
+                    )
+
+                # Save best model
+                if mean_reward > self.best_mean_reward:
+                    self.best_mean_reward = mean_reward
+                    best_path = self.save_path / "best_model"
+                    self.model.save(best_path)
+                    # Also save VecNormalize stats with best model
+                    self.vec_normalize_env.save(
+                        str(self.save_path / "vec_normalize.pkl")
+                    )
+                    if self.verbose > 0:
+                        print(
+                            f"  New best model! Mean reward: {mean_reward:.2f} "
+                            f"(saved to {best_path})"
+                        )
+
+                # Save latest checkpoint (delete previous to save space)
+                latest_path = self.save_path / "latest_model"
+                self.model.save(latest_path)
+                # Also save VecNormalize stats with latest
+                self.vec_normalize_env.save(str(self.save_path / "vec_normalize.pkl"))
+
+            return True
+
+        def _on_training_end(self) -> None:
+            # Final save
+            final_path = self.save_path / "final_model"
+            self.model.save(final_path)
+            # Save VecNormalize stats
+            self.vec_normalize_env.save(str(self.save_path / "vec_normalize.pkl"))
+            print(f"\nTraining complete! Final model saved to {final_path}")
+            print(f"Best mean reward achieved: {self.best_mean_reward:.2f}")
+            print(f"Total episodes: {len(self.episode_rewards)}")
+            print(f"Metrics saved to: {self.metrics_file}")
+
+    # === Model Setup ===
+    # Configure logger for TensorBoard + stdout + CSV
+    logger = configure(str(log_dir), ["stdout", "csv", "tensorboard"])
+
+    # Try to load existing model if resuming
+    model = None
+    if resume_dir:
+        # Priority order: final > interrupted > latest
+        model_candidates = [
+            model_dir / "final_model.zip",
+            model_dir / "interrupted_model.zip",
+            model_dir / "latest_model.zip",
+        ]
+        for candidate in model_candidates:
+            if candidate.exists():
+                print(f"Loading model from {candidate}")
+                model = MaskablePPO.load(
+                    str(candidate),
+                    env=envs,
+                    tensorboard_log=str(log_dir),
+                )
+                model.set_logger(logger)
+                print(f"Model loaded successfully!")
+                break
+        if model is None:
+            print("Warning: No model found in resume directory, creating new model")
+
+    if model is None:
+        print("Initializing new MaskablePPO model...")
+        model = MaskablePPO(
+            "MultiInputPolicy",
+            envs,
+            verbose=1,
+            learning_rate=3e-4,
+            n_steps=2048,  # Steps per env before update
+            batch_size=64,
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            ent_coef=0.01,  # Add entropy for exploration
+            vf_coef=0.5,
+            max_grad_norm=0.5,
+            tensorboard_log=str(log_dir),
+        )
+        model.set_logger(logger)
+
+    # === Callbacks ===
+    metrics_callback = TrainingMetricsCallback(
+        save_path=model_dir,
+        vec_normalize_env=envs,
+        check_freq=5000,  # Check every 5k steps
+        verbose=1,
+        resume=resume_dir is not None,
+    )
+
+    # === Training ===
+    print(f"\nStarting training for {total_timesteps:,} timesteps...")
+    print("Press Ctrl+C to stop training early (model will be saved)\n")
+
+    try:
+        model.learn(
+            total_timesteps=total_timesteps,
+            callback=metrics_callback,
+            log_interval=log_interval,
+            progress_bar=True,
+        )
+    except KeyboardInterrupt:
+        print("\n\nTraining interrupted by user!")
+        interrupt_path = model_dir / "interrupted_model"
+        model.save(interrupt_path)
+        # Save VecNormalize stats
+        envs.save(str(model_dir / "vec_normalize.pkl"))
+        print(f"Model saved to {interrupt_path}")
+
+    envs.close()
+    print("\nDone!")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="SimulationCraft RL Bridge - Train RL agents for WoW rotations",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--simc", default="./simc", help="Path to simc executable")
+    parser.add_argument("--profile", required=True, help="Path to .simc profile")
+    parser.add_argument(
+        "--episodes", type=int, default=1, help="Number of episodes (demo mode)"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["demo", "single", "multi"],
+        default="multi",
+        help="Training mode: demo (random actions), single (1 env), multi (parallel)",
+    )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to training run directory to resume (e.g., training_runs/simc_ppo_20251229_015900)",
+    )
+    args = parser.parse_args()
+
+    if args.mode == "demo":
+        run_demo(args)
+    elif args.mode == "single":
+        run_single_thread_sb3(args)
+    else:
+        run_multi_thread_sb3(args)
