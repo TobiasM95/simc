@@ -40,6 +40,17 @@ struct observation_t
   double target_ttd_norm = 0.0;
 
   std::array<double, RESOURCE_MAX> resource_pct{};
+
+  // Spec-specific observations (populated based on specialization)
+  std::vector<double> buff_remains_norm;  // Normalized buff durations [0,1] (by 30s)
+  std::vector<int> buff_stacks;           // Raw buff stack counts
+  std::vector<double> dot_remains_norm;   // Normalized dot durations on target [0,1]
+  std::vector<int> dot_stacks;            // Raw dot stack counts
+
+  // Metadata for Python to interpret the vectors
+  int spec_id = 0;                       // specialization_e cast to int
+  std::vector<std::string> buff_labels;  // Names matching buff_remains_norm indices
+  std::vector<std::string> dot_labels;   // Names matching dot_remains_norm indices
 };
 
 // ============================================================================
@@ -128,5 +139,25 @@ void update_action_features( const player_t& player, execute_type context, util:
 // Tracing (JSONL output for validation)
 // ============================================================================
 void trace_decision( const step_input_t& input, std::size_t chosen_index );
+
+// ============================================================================
+// Reward shaping (potential-based)
+// ============================================================================
+
+/// Potential function type: maps observation → scalar potential value
+/// For reward shaping: r' = r + γ*Φ(s') - Φ(s)
+using potential_fn_t = double ( * )( const observation_t& obs, const player_t* player );
+
+/// Get the current potential function (nullptr = no shaping, default)
+potential_fn_t get_potential_fn();
+
+/// Set a custom potential function for reward shaping
+void set_potential_fn( potential_fn_t fn );
+
+/// Compute shaped reward given raw reward and observations.
+/// If no potential function is set, returns raw_reward unchanged.
+/// Formula: r' = raw_reward + gamma * Φ(curr_obs) - Φ(prev_obs)
+double compute_shaped_reward( double raw_reward, const observation_t& prev_obs, const observation_t& curr_obs,
+                              double gamma, const player_t* player );
 
 }  // namespace rl

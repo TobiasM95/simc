@@ -107,11 +107,20 @@ class SimcEnv(gym.Env):
         self._num_actions: int = 0  # Number of filtered actions
         self._raw_num_actions: int = 0  # Original number of actions from simc
 
+        # Spec-specific observation tracking
+        self._num_buffs: int = 0  # Number of tracked buffs for this spec
+        self._num_dots: int = 0  # Number of tracked dots for this spec
+        self._buff_labels: list[str] = []  # Names of tracked buffs
+        self._dot_labels: list[str] = []  # Names of tracked dots
+        self._spec_id: int = 0  # Specialization ID
+
         # Initial TTD for normalization (captured from first observation)
         self._initial_ttd: Optional[float] = None
 
         # Observation space: continuous features
         # [gcd_rem_norm, ttd_norm] + resource_pct[18] + cd_charges_f[n_actions]
+        #   + buff_remains[num_buffs] + buff_stacks[num_buffs]
+        #   + dot_remains[num_dots] + dot_stacks[num_dots]
         # We'll set the actual size after first step when we know num_actions
         self._obs_dim = (
             2 + self._num_resources
@@ -152,10 +161,11 @@ class SimcEnv(gym.Env):
 
     def _probe_action_space(self) -> None:
         """
-        Probe simc to discover the actual action space size.
+        Probe simc to discover the actual action space size and spec observation config.
 
         This runs a quick simulation to get the first state message,
-        which contains the action labels and space dimensions.
+        which contains the action labels, space dimensions, and spec-specific
+        buff/dot tracking configuration.
         The process is then closed - actual training uses fresh processes.
         """
         self._start_process()
@@ -181,12 +191,28 @@ class SimcEnv(gym.Env):
 
             self._num_actions = len(self._filtered_labels)
 
-            # Now set the actual observation and action spaces
-            obs_dim = 2 + self._num_resources + self._num_actions
+            # Extract spec-specific observation configuration
+            self._spec_id = msg.get("spec_id", 0)
+            self._buff_labels = msg.get("buff_labels", [])
+            self._dot_labels = msg.get("dot_labels", [])
+            self._num_buffs = len(self._buff_labels)
+            self._num_dots = len(self._dot_labels)
+
+            # Calculate observation dimension:
+            # 2 (gcd_rem_norm, ttd_norm) + 18 (resource_pct) + n_actions (cd_charges)
+            # + 2*num_buffs (buff_remains + buff_stacks) + 2*num_dots (dot_remains + dot_stacks)
+            obs_dim = (
+                2
+                + self._num_resources
+                + self._num_actions
+                + 2 * self._num_buffs
+                + 2 * self._num_dots
+            )
+
             self.observation_space = spaces.Dict(
                 {
                     "obs": spaces.Box(
-                        low=-1.0, high=10.0, shape=(obs_dim,), dtype=np.float32
+                        low=-1.0, high=100.0, shape=(obs_dim,), dtype=np.float32
                     ),
                     "mask": spaces.MultiBinary(self._num_actions),
                 }
@@ -306,6 +332,18 @@ class SimcEnv(gym.Env):
         obs_parts.extend(msg["resource_pct"])
         obs_parts.extend(filtered_cd_charges)
 
+        # Add spec-specific buff observations (remains normalized, then stacks)
+        buff_remains = msg.get("buff_remains", [0.0] * self._num_buffs)
+        buff_stacks = msg.get("buff_stacks", [0.0] * self._num_buffs)
+        obs_parts.extend(buff_remains)
+        obs_parts.extend(buff_stacks)
+
+        # Add spec-specific dot observations (remains normalized, then stacks)
+        dot_remains = msg.get("dot_remains", [0.0] * self._num_dots)
+        dot_stacks = msg.get("dot_stacks", [0.0] * self._num_dots)
+        obs_parts.extend(dot_remains)
+        obs_parts.extend(dot_stacks)
+
         obs = np.array(obs_parts, dtype=np.float32)
         mask = np.array(filtered_mask, dtype=np.int8)
 
@@ -353,6 +391,9 @@ class SimcEnv(gym.Env):
             "action_labels": self._filtered_labels,
             "time": msg["t"],
             "initial_ttd": self._initial_ttd,
+            "spec_id": self._spec_id,
+            "buff_labels": self._buff_labels,
+            "dot_labels": self._dot_labels,
         }
 
         return obs, info

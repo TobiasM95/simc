@@ -337,6 +337,10 @@ player/unique_gear_shadowlands.cpp
 player/unique_gear_thewarwithin.cpp
 rl/rl_interface.hpp
 rl/rl_interface.cpp
+rl/rl_spec_config.hpp
+rl/rl_spec_config.cpp
+rl/rl_potential_functions.hpp
+rl/rl_potential_functions.cpp
 report/charts.cpp
 report/color.cpp
 report/decorators.cpp

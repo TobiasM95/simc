@@ -18,6 +18,7 @@
 #include "player_resources.hpp"
 #include "player_stat_cache.hpp"
 #include "rating.hpp"
+#include "rl/rl_interface.hpp"
 #include "sc_enums.hpp"
 #include "sim/proc.hpp"
 #include "sim/proc_rng.hpp"
@@ -478,6 +479,8 @@ struct player_t : public actor_t
   std::vector<action_t*> rl_action_list;                              // cached RL action space (built once)
   std::vector<std::string> rl_action_labels;                          // cached RL action labels
   std::vector<action_t*> rl_wait_actions;                             // wait actions for RL pseudo-actions
+  rl::observation_t rl_prev_observation;                              // previous observation for reward shaping
+  bool rl_prev_observation_valid = false;                             // true after first step
   double dpr;
   struct incoming_damage_entry_t
   {

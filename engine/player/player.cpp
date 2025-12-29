@@ -6481,6 +6481,7 @@ void player_t::datacollection_begin()
   iteration_dmg                         = 0;
   priority_iteration_dmg                = 0;
   rl_last_priority_iteration_dmg        = 0;
+  rl_prev_observation_valid             = false;
   iteration_heal                        = 0;
   iteration_absorb                      = 0.0;
   iteration_absorb_taken                = 0.0;
@@ -14341,13 +14342,24 @@ action_t* player_t::select_action( const action_priority_list_t& list, execute_t
     }
 
     // Reward is attributed to the previous decision: damage delta since last decision point.
-    const double reward            = priority_iteration_dmg - rl_last_priority_iteration_dmg;
+    double reward                  = priority_iteration_dmg - rl_last_priority_iteration_dmg;
     rl_last_priority_iteration_dmg = priority_iteration_dmg;
 
     rl::step_input_t input;
     input.player      = this;
     input.observation = rl::build_observation( *this );
     input.reward      = reward;
+
+    // Apply potential-based reward shaping if enabled
+    if ( rl_prev_observation_valid && rl::get_potential_fn() )
+    {
+      // Use gamma = 0.99 for shaping (same as typical PPO discount)
+      input.reward = rl::compute_shaped_reward( reward, rl_prev_observation, input.observation, 0.99, this );
+    }
+
+    // Store current observation for next step's shaping computation
+    rl_prev_observation       = input.observation;
+    rl_prev_observation_valid = true;
 
     input.action_space.actions = util::span<action_t* const>( rl_action_list.data(), rl_action_list.size() );
     input.action_space.action_labels =

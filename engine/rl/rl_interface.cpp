@@ -4,7 +4,11 @@
 
 #include "rl_interface.hpp"
 
+#include "rl_spec_config.hpp"
+
 #include "action/action.hpp"
+#include "action/dot.hpp"
+#include "buff/buff.hpp"
 #include "player/player.hpp"
 #include "sim/cooldown.hpp"
 #include "sim/sim.hpp"
@@ -27,6 +31,12 @@ constexpr double WAIT_DURATIONS[]             = { 0.1, 0.2, 0.5, 1.0, 1.5 };
 constexpr std::size_t NUM_WAIT_PSEUDO_ACTIONS = sizeof( WAIT_DURATIONS ) / sizeof( WAIT_DURATIONS[ 0 ] );
 
 const char* WAIT_LABELS[] = { "wait_0.1", "wait_0.2", "wait_0.5", "wait_1.0", "wait_1.5" };
+
+// ============================================================================
+// Reward shaping
+// ============================================================================
+rl::potential_fn_t g_potential_fn = nullptr;
+
 // ============================================================================
 // Tracing helpers
 // ============================================================================
@@ -189,6 +199,9 @@ void write_step_json_to_stream( std::ostream& out, const step_input_t& input )
   out << "\"gcd_rem_n\":" << input.observation.gcd_remaining_norm << ",";
   out << "\"reward\":" << input.reward << ",";
 
+  // Spec ID
+  out << "\"spec_id\":" << input.observation.spec_id << ",";
+
   // Resources
   out << "\"resource_pct\":[";
   for ( std::size_t i = 0; i < input.observation.resource_pct.size(); ++i )
@@ -196,6 +209,66 @@ void write_step_json_to_stream( std::ostream& out, const step_input_t& input )
     if ( i )
       out << ",";
     out << input.observation.resource_pct[ i ];
+  }
+  out << "],";
+
+  // Buff remains (normalized)
+  out << "\"buff_remains\":[";
+  for ( std::size_t i = 0; i < input.observation.buff_remains_norm.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.observation.buff_remains_norm[ i ];
+  }
+  out << "],";
+
+  // Buff stacks
+  out << "\"buff_stacks\":[";
+  for ( std::size_t i = 0; i < input.observation.buff_stacks.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.observation.buff_stacks[ i ];
+  }
+  out << "],";
+
+  // Buff labels
+  out << "\"buff_labels\":[";
+  for ( std::size_t i = 0; i < input.observation.buff_labels.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << "\"" << json_escape( input.observation.buff_labels[ i ] ) << "\"";
+  }
+  out << "],";
+
+  // Dot remains (normalized)
+  out << "\"dot_remains\":[";
+  for ( std::size_t i = 0; i < input.observation.dot_remains_norm.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.observation.dot_remains_norm[ i ];
+  }
+  out << "],";
+
+  // Dot stacks
+  out << "\"dot_stacks\":[";
+  for ( std::size_t i = 0; i < input.observation.dot_stacks.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << input.observation.dot_stacks[ i ];
+  }
+  out << "],";
+
+  // Dot labels
+  out << "\"dot_labels\":[";
+  for ( std::size_t i = 0; i < input.observation.dot_labels.size(); ++i )
+  {
+    if ( i )
+      out << ",";
+    out << "\"" << json_escape( input.observation.dot_labels[ i ] ) << "\"";
   }
   out << "],";
 
@@ -376,6 +449,62 @@ observation_t build_observation( const player_t& player )
   // Resources
   for ( resource_e r = RESOURCE_NONE; r < RESOURCE_MAX; ++r )
     obs.resource_pct[ r ] = player.resources.pct( r );
+
+  // ============================================================================
+  // Spec-specific observations
+  // ============================================================================
+  const specialization_e spec = player.specialization();
+  obs.spec_id                 = static_cast<int>( spec );
+
+  spec_obs_config_t& config = get_mutable_spec_obs_config( spec );
+
+  // Ensure caches are populated
+  cache_buff_pointers( config, player );
+  if ( player.target )
+    cache_dot_pointers( config, player, player.target );
+
+  // Copy labels (for JSON output - sent every step for simplicity)
+  obs.buff_labels = config.buff_names;
+  obs.dot_labels  = config.dot_names;
+
+  // Populate buff data from cached pointers
+  constexpr double BUFF_NORM_MAX = 30.0;  // Normalize durations by 30 seconds
+  obs.buff_remains_norm.reserve( config.cached_buffs.size() );
+  obs.buff_stacks.reserve( config.cached_buffs.size() );
+
+  for ( buff_t* b : config.cached_buffs )
+  {
+    if ( b && b->check() )
+    {
+      double remains = b->remains().total_seconds();
+      obs.buff_remains_norm.push_back( norm01( remains, BUFF_NORM_MAX ) );
+      obs.buff_stacks.push_back( b->check() );  // check() returns stack count
+    }
+    else
+    {
+      obs.buff_remains_norm.push_back( 0.0 );
+      obs.buff_stacks.push_back( 0 );
+    }
+  }
+
+  // Populate dot data from cached pointers
+  obs.dot_remains_norm.reserve( config.cached_dots.size() );
+  obs.dot_stacks.reserve( config.cached_dots.size() );
+
+  for ( dot_t* d : config.cached_dots )
+  {
+    if ( d && d->is_ticking() )
+    {
+      double remains = d->remains().total_seconds();
+      obs.dot_remains_norm.push_back( norm01( remains, BUFF_NORM_MAX ) );
+      obs.dot_stacks.push_back( d->current_stack() );
+    }
+    else
+    {
+      obs.dot_remains_norm.push_back( 0.0 );
+      obs.dot_stacks.push_back( 0 );
+    }
+  }
 
   return obs;
 }
@@ -606,6 +735,36 @@ void trace_decision( const step_input_t& input, std::size_t chosen_index )
 
   ( *out ) << "}\n";
   out->flush();
+}
+
+// ============================================================================
+// Potential function management for reward shaping
+// ============================================================================
+
+potential_fn_t get_potential_fn()
+{
+  return g_potential_fn;
+}
+
+void set_potential_fn( potential_fn_t fn )
+{
+  g_potential_fn = fn;
+}
+
+double compute_shaped_reward( double raw_reward, const observation_t& prev_obs, const observation_t& curr_obs,
+                              double gamma, const player_t* player )
+{
+  if ( !g_potential_fn )
+    return raw_reward;
+
+  double prev_potential = g_potential_fn( prev_obs, player );
+  double curr_potential = g_potential_fn( curr_obs, player );
+
+  // F(s, s') = gamma * Phi(s') - Phi(s)
+  // This is proven to preserve optimal policy while providing denser signal
+  double shaping = gamma * curr_potential - prev_potential;
+
+  return raw_reward + shaping;
 }
 
 }  // namespace rl
