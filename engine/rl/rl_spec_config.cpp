@@ -48,6 +48,11 @@ void init_spec_configs()
                                         "apex_predators_craving",
                                         "savage_fury",
                                         "prowl",  // Stealth state
+                                        "bt_swipe",
+                                        "bt_rake",
+                                        "bt_shred",
+                                        "bt_moonfire",
+                                        "bt_thrash",
                                     },
                                     // Dots on target to track
                                     {
@@ -56,6 +61,7 @@ void init_spec_configs()
                                         "thrash_cat",
                                         "lunar_inspiration",  // Moonfire in cat form
                                         "feral_frenzy_tick",  // The actual dot name per sc_druid.cpp
+                                        "adaptive_swarm_damage",
                                     },
                                     RESOURCE_COMBO_POINT };
 

@@ -181,3 +181,21 @@ The policy receives the full step input and returns an action index. If the chos
 
 - `dummy_policy` - Round-robin through legal actions (default for testing)
 - `stdio_policy` - Reads/writes JSON via stdin/stdout (enabled by `rl_stdio=1`)
+
+## Notes
+
+Some handwritten notes
+
+### Useful commands:
+
+Training from scratch:
+
+```
+uv run python rl_bridge.py --simc "C:\Users\tobim\Documents\Programming\MachineLearning\simc\out\build\x64-Debug\simc.exe" --profile "./tww_st_feral.simc" --mode "multi"
+```
+
+Evaluation:
+
+```
+uv run python rl_bridge.py --simc "C:\Users\tobim\Documents\Programming\MachineLearning\simc\out\build\x64-Debug\simc.exe" --profile "./tww_st_feral.simc" --mode "eval" --model-dir "training_runs/simc_ppo_20251229_150600" --iterations 2000
+```

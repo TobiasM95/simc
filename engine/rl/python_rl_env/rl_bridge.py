@@ -945,6 +945,309 @@ def run_multi_thread_sb3(args):
     print("\nDone!")
 
 
+def run_evaluation(args):
+    """
+    Run evaluation of a trained RL model over many iterations.
+
+    This runs simc with many iterations (default 2000) using the RL model
+    for action selection, generating statistical output like a normal simc run.
+    Produces HTML and text reports.
+
+    Unlike training, this function directly manages the simc subprocess to
+    handle multiple iterations in a single process run, allowing simc to
+    aggregate statistics and generate proper reports.
+    """
+    import subprocess
+    import time
+    from pathlib import Path
+
+    from sb3_contrib import MaskablePPO
+
+    # === Configuration ===
+    iterations = args.iterations if hasattr(args, "iterations") else 2000
+    model_dir = Path(args.model_dir)
+
+    if not model_dir.exists():
+        raise ValueError(f"Model directory does not exist: {model_dir}")
+
+    # Setup output paths
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = (
+        Path(args.output_dir)
+        if hasattr(args, "output_dir") and args.output_dir
+        else model_dir / "evaluation"
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    html_output = output_dir / f"eval_{timestamp}.html"
+    text_output = output_dir / f"eval_{timestamp}.txt"
+
+    print(f"=== SimC RL Evaluation ===")
+    print(f"Model directory: {model_dir}")
+    print(f"Iterations: {iterations}")
+    print(f"HTML output: {html_output}")
+    print(f"Text output: {text_output}")
+
+    # === Load Model ===
+    model_candidates = [
+        model_dir / "models" / "best_model.zip",
+        model_dir / "models" / "final_model.zip",
+        model_dir / "models" / "interrupted_model.zip",
+        model_dir / "models" / "latest_model.zip",
+    ]
+
+    model_path = None
+    for candidate in model_candidates:
+        if candidate.exists():
+            model_path = candidate
+            break
+
+    if model_path is None:
+        raise ValueError(f"No model found in {model_dir / 'models'}")
+
+    print(f"Loading model from {model_path}")
+
+    # === Create a dummy env to load the model with correct observation space ===
+    action_blacklist = {
+        "invoke_external_buff",
+        "snapshot_stats",
+        "cancel_buff",
+        "use_item_arazs_ritual_forge",
+        "do_treacherous_transmitter_task",
+    }
+
+    # Create a probe env to get observation/action space dimensions
+    probe_env = SimcEnv(
+        simc_path=args.simc,
+        profile=args.profile,
+        action_blacklist=action_blacklist,
+        iterations=1,  # Just for probing
+    )
+    obs_space = probe_env.observation_space
+    act_space = probe_env.action_space
+    num_actions = probe_env._num_actions
+    raw_num_actions = probe_env._raw_num_actions
+    action_index_map = probe_env._action_index_map
+    filtered_labels = probe_env._filtered_labels
+    num_resources = probe_env._num_resources
+    num_buffs = probe_env._num_buffs
+    num_dots = probe_env._num_dots
+    probe_env.close()
+
+    print(f"Action space: {num_actions} actions (from {raw_num_actions} raw)")
+    print(f"Action labels: {filtered_labels}")
+
+    # Load the model
+    # Note: VecNormalize was created with norm_obs=False during training,
+    # so we don't need to load or apply any observation normalization.
+    # The observations are already in a suitable range [0, ~10].
+    model = MaskablePPO.load(str(model_path))
+    print("Model loaded successfully!")
+
+    # === Build simc command for evaluation ===
+    cmd = [
+        args.simc,
+        args.profile,
+        "rl_enable=1",
+        "rl_stdio=1",
+        "rl_trace=0",
+        f"iterations={iterations}",
+        f"html={html_output}",
+        f"output={text_output}",
+    ]
+
+    print(f"\nSimC command: {' '.join(cmd)}")
+    print(f"\nRunning {iterations} iterations with RL model...")
+    print("=" * 60)
+
+    # === Start simc subprocess ===
+    process = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    start_time = time.time()
+    total_steps = 0
+    iteration_count = 0
+    iteration_damages = []
+    non_json_lines = []
+
+    def parse_state_to_obs(msg: dict) -> dict:
+        """Parse simc message to observation dict compatible with model."""
+        # Get raw action data
+        raw_mask = msg["mask"]
+        raw_cd_charges = msg["cd_charges_f"]
+
+        # Build filtered mask and cd_charges using the same mapping as training
+        filtered_mask = [raw_mask[i] for i in action_index_map]
+        filtered_cd_charges = [raw_cd_charges[i] for i in action_index_map]
+
+        # Compute normalized values
+        gcd_rem = msg.get("gcd_rem", 0.0)
+        ttd = msg.get("ttd", 300.0)
+        initial_ttd = 300.0  # Assume default fight length
+
+        gcd_rem_norm = gcd_rem / BASE_GCD_SECONDS if BASE_GCD_SECONDS > 0 else 0.0
+        ttd_norm = ttd / initial_ttd if initial_ttd > 0 else 0.0
+
+        # Build observation vector
+        obs_parts = [gcd_rem_norm, ttd_norm]
+        obs_parts.extend(msg["resource_pct"])
+        obs_parts.extend(filtered_cd_charges)
+
+        # Add spec-specific buff observations
+        buff_remains = msg.get("buff_remains", [0.0] * num_buffs)
+        buff_stacks = msg.get("buff_stacks", [0.0] * num_buffs)
+        obs_parts.extend(buff_remains)
+        obs_parts.extend(buff_stacks)
+
+        # Add spec-specific dot observations
+        dot_remains = msg.get("dot_remains", [0.0] * num_dots)
+        dot_stacks = msg.get("dot_stacks", [0.0] * num_dots)
+        obs_parts.extend(dot_remains)
+        obs_parts.extend(dot_stacks)
+
+        obs = np.array(obs_parts, dtype=np.float32)
+        mask = np.array(filtered_mask, dtype=np.int8)
+
+        return {"obs": obs, "mask": mask}
+
+    try:
+        while True:
+            # Read line from simc
+            line = process.stdout.readline()
+            if not line:
+                # Process ended
+                break
+
+            line = line.strip()
+            if not line:
+                continue
+
+            # Try to parse as JSON
+            if line.startswith("{"):
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    non_json_lines.append(line)
+                    continue
+
+                msg_type = msg.get("type")
+
+                if msg_type == "done":
+                    # End of one iteration
+                    iteration_count += 1
+                    iteration_damages.append(msg.get("total_damage", 0.0))
+
+                    if iteration_count % 100 == 0:
+                        elapsed = time.time() - start_time
+                        avg_dmg = np.mean(iteration_damages[-100:])
+                        print(
+                            f"  Iteration {iteration_count}/{iterations} - "
+                            f"Avg DPS (last 100): {avg_dmg:,.0f} - "
+                            f"Elapsed: {elapsed:.1f}s"
+                        )
+
+                    # Don't break - continue to next iteration
+                    continue
+
+                # Regular step message - get action from model
+                obs_dict = parse_state_to_obs(msg)
+
+                # Prepare observation for model (needs to be in vectorized format)
+                obs_array = obs_dict["obs"].reshape(1, -1)
+                mask_array = obs_dict["mask"].reshape(1, -1)
+
+                # Build observation dict in the format expected by MultiInputPolicy
+                # Note: VecNormalize was created with norm_obs=False during training,
+                # so we do NOT normalize observations here - they should match training exactly
+                vec_obs = {"obs": obs_array, "mask": mask_array}
+
+                # Get action from model (deterministic for evaluation)
+                # CRITICAL: Must pass action_masks for MaskablePPO to respect legal actions
+                action, _ = model.predict(
+                    vec_obs, deterministic=True, action_masks=mask_array
+                )
+                action = int(action[0])
+
+                # Map filtered action to raw simc action
+                raw_action = action_index_map[action]
+
+                # Send action to simc
+                process.stdin.write(f"{raw_action}\n")
+                process.stdin.flush()
+
+                total_steps += 1
+
+            else:
+                # Non-JSON line - save for debugging
+                non_json_lines.append(line)
+
+    except Exception as e:
+        print(f"\nError during evaluation: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+    finally:
+        # Wait for process to complete
+        try:
+            process.stdin.close()
+        except Exception:
+            pass
+
+        # Read any remaining stderr
+        stderr_output = process.stderr.read() if process.stderr else ""
+
+        process.wait(timeout=30.0)
+
+    elapsed = time.time() - start_time
+
+    # === Report Results ===
+    print("=" * 60)
+    print(f"\n=== Evaluation Complete ===")
+    print(f"Iterations completed: {iteration_count}")
+    print(f"Total decision steps: {total_steps:,}")
+    print(f"Time elapsed: {elapsed:.1f}s")
+    if elapsed > 0:
+        print(f"Iterations/second: {iteration_count / elapsed:.1f}")
+        print(f"Steps/second: {total_steps / elapsed:.1f}")
+
+    if iteration_damages:
+        print(f"\nDPS Statistics ({len(iteration_damages)} iterations):")
+        print(f"  Mean:   {np.mean(iteration_damages):,.0f}")
+        print(f"  Std:    {np.std(iteration_damages):,.0f}")
+        print(f"  Min:    {np.min(iteration_damages):,.0f}")
+        print(f"  Max:    {np.max(iteration_damages):,.0f}")
+        print(f"  Median: {np.median(iteration_damages):,.0f}")
+
+    print(f"\nOutput files:")
+    if html_output.exists():
+        print(f"  HTML report: {html_output} ({html_output.stat().st_size:,} bytes)")
+    else:
+        print(f"  HTML report: NOT CREATED")
+    if text_output.exists():
+        print(f"  Text report: {text_output} ({text_output.stat().st_size:,} bytes)")
+    else:
+        print(f"  Text report: NOT CREATED")
+
+    # Show simc output for debugging
+    if non_json_lines:
+        print(f"\n--- SimC Output ({len(non_json_lines)} lines) ---")
+        for line in non_json_lines[-50:]:  # Last 50 lines
+            print(f"  {line}")
+
+    if stderr_output.strip():
+        print(f"\n--- SimC Stderr ---")
+        print(stderr_output)
+
+    print("\nDone!")
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -959,9 +1262,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mode",
-        choices=["demo", "single", "multi"],
+        choices=["demo", "single", "multi", "eval"],
         default="multi",
-        help="Training mode: demo (random actions), single (1 env), multi (parallel)",
+        help="Mode: demo (random actions), single (1 env), multi (parallel training), eval (evaluate model)",
     )
     parser.add_argument(
         "--resume",
@@ -969,11 +1272,35 @@ if __name__ == "__main__":
         default=None,
         help="Path to training run directory to resume (e.g., training_runs/simc_ppo_20251229_015900)",
     )
+    parser.add_argument(
+        "--model-dir",
+        type=str,
+        default=None,
+        dest="model_dir",
+        help="Path to model directory for evaluation (e.g., training_runs/simc_ppo_20251229_015900)",
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=2000,
+        help="Number of iterations for evaluation mode",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        dest="output_dir",
+        help="Output directory for evaluation reports (defaults to model_dir/evaluation)",
+    )
     args = parser.parse_args()
 
     if args.mode == "demo":
         run_demo(args)
     elif args.mode == "single":
         run_single_thread_sb3(args)
+    elif args.mode == "eval":
+        if not args.model_dir:
+            parser.error("--model-dir is required for evaluation mode")
+        run_evaluation(args)
     else:
         run_multi_thread_sb3(args)
