@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import threading
 from typing import Any, Optional
 
 import gymnasium as gym
@@ -130,6 +131,11 @@ class SimcEnv(gym.Env):
         self._current_state: Optional[dict] = None
         self._total_reward = 0.0
 
+        # Stderr capture thread and buffer
+        self._stderr_buffer: list[str] = []
+        self._stderr_lock = threading.Lock()
+        self._stderr_thread: Optional[threading.Thread] = None
+
         # Probe the simc process once to discover the actual action space size
         # This is necessary because Gymnasium/SB3 expects fixed observation/action spaces
         self._probe_action_space()
@@ -223,10 +229,31 @@ class SimcEnv(gym.Env):
         finally:
             self._close_process()
 
+    def _stderr_reader(self) -> None:
+        """Background thread that reads stderr and accumulates output."""
+        try:
+            if self._process and self._process.stderr:
+                for line in self._process.stderr:
+                    with self._stderr_lock:
+                        self._stderr_buffer.append(line)
+                        # Also print to console in real-time for debugging
+                        print(f"[simc stderr] {line}", end="", file=sys.stderr)
+        except Exception:
+            pass  # Process may have been closed
+
+    def _get_stderr_output(self) -> str:
+        """Get all captured stderr output."""
+        with self._stderr_lock:
+            return "".join(self._stderr_buffer)
+
     def _start_process(self) -> None:
         """Start the simc subprocess."""
         if self._process is not None:
             self._close_process()
+
+        # Clear stderr buffer
+        with self._stderr_lock:
+            self._stderr_buffer.clear()
 
         cmd = self._build_command()
         self._process = subprocess.Popen(
@@ -237,6 +264,10 @@ class SimcEnv(gym.Env):
             text=True,
             bufsize=1,  # Line-buffered for responsive communication
         )
+
+        # Start background thread to read stderr
+        self._stderr_thread = threading.Thread(target=self._stderr_reader, daemon=True)
+        self._stderr_thread.start()
 
     def _close_process(self) -> None:
         """Close the simc subprocess."""
@@ -251,6 +282,10 @@ class SimcEnv(gym.Env):
                 self._process.kill()
             finally:
                 self._process = None
+                # Wait for stderr thread to finish
+                if self._stderr_thread and self._stderr_thread.is_alive():
+                    self._stderr_thread.join(timeout=1.0)
+                self._stderr_thread = None
 
     def _read_message(self) -> dict:
         """Read a JSON message from simc stdout."""
@@ -260,9 +295,43 @@ class SimcEnv(gym.Env):
         while True:
             line = self._process.stdout.readline()
             if not line:
-                # Process ended unexpectedly
-                stderr = self._process.stderr.read() if self._process.stderr else ""
-                raise RuntimeError(f"simc process ended unexpectedly. stderr: {stderr}")
+                # Process ended unexpectedly - gather as much diagnostic info as possible
+                exit_code = self._process.poll()
+
+                # Give stderr thread a moment to capture final output
+                import time
+
+                time.sleep(0.1)
+
+                # Get all captured stderr from our background thread
+                stderr = self._get_stderr_output()
+
+                # Provide more diagnostic information
+                error_msg = f"simc process ended unexpectedly.\n"
+                error_msg += f"  Exit code: {exit_code}\n"
+                if exit_code is not None:
+                    if exit_code < 0:
+                        # Negative exit codes on Unix indicate signal
+                        import signal
+
+                        try:
+                            sig_name = signal.Signals(-exit_code).name
+                            error_msg += f"  Signal: {sig_name} ({-exit_code})\n"
+                        except (ValueError, AttributeError):
+                            error_msg += f"  Signal: {-exit_code}\n"
+                    elif exit_code == 0xC0000005:
+                        error_msg += (
+                            "  Windows: Access Violation (EXCEPTION_ACCESS_VIOLATION)\n"
+                        )
+                    elif exit_code == 0xC0000094:
+                        error_msg += "  Windows: Integer Divide by Zero\n"
+                    elif exit_code == 0xC00000FD:
+                        error_msg += "  Windows: Stack Overflow\n"
+                    elif exit_code == 3:
+                        error_msg += "  Likely: Assertion failure or abort()\n"
+                error_msg += f"  stderr:\n{stderr if stderr else '(empty)'}"
+
+                raise RuntimeError(error_msg)
             if not line.lstrip().startswith("{"):
                 continue  # Skip debug or non-JSON lines
             try:

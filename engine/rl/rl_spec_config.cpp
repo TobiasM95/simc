@@ -38,6 +38,11 @@ void init_spec_configs()
   // ============================================================================
   g_spec_configs[ DRUID_FERAL ] = { // Player buffs to track (order matters - defines observation indices)
                                     {
+                                        // Form buffs (for stance tracking)
+                                        "cat_form",
+                                        "bear_form",
+                                        "moonkin_form",
+                                        // Combat buffs
                                         "tigers_fury",
                                         "bloodtalons",
                                         "clearcasting_cat",
