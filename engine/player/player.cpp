@@ -14321,8 +14321,10 @@ action_t* player_t::select_action( const action_priority_list_t& list, execute_t
   visited_apls_ |= list.internal_id_mask;
 
   // Experimental RL hook: only on the root select_action call (i.e., not while evaluating
-  // call_action_list recursion).
-  if ( sim && sim->rl_enable && visited_apls_ == list.internal_id_mask )
+  // call_action_list recursion), and ONLY for FOREGROUND actions.
+  // We skip OFF_GCD and CAST_WHILE_CASTING contexts to reduce decision points and episode length.
+  // This means the RL agent only decides at "main" action points, not off-GCD opportunities.
+  if ( sim && sim->rl_enable && visited_apls_ == list.internal_id_mask && et == execute_type::FOREGROUND )
   {
     // Build action list once (lazy init from player_t::action_list)
     if ( rl_action_list.empty() )

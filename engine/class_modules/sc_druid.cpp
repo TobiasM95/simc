@@ -7726,8 +7726,8 @@ public:
       // apply bonus from opposite dot mastery
       BASE::force_target_effect(
           [ this, other_dot ]( actor_target_data_t* t ) {
-            return umbral_embrace_check() &&
-                   std::invoke( other_dot, static_cast<druid_td_t*>( t )->dots )->is_ticking();
+            auto dot = std::invoke( other_dot, static_cast<druid_td_t*>( t )->dots );
+            return umbral_embrace_check() && dot && dot->is_ticking();
           },
           other_dmg, as<unsigned>( other_dmg->effect_count() ), p->mastery.astral_invocation );
 
@@ -15416,15 +15416,19 @@ player_t* druid_t::get_smart_target( const std::vector<player_t*>& _tl, dot_t* d
     {
       // sort by time remaining
       range::sort( tl, [ this, &dot ]( player_t* a, player_t* b ) {
-        return std::invoke( dot, get_target_data( a )->dots )->remains() <
-               std::invoke( dot, get_target_data( b )->dots )->remains();
+        auto dot_a     = std::invoke( dot, get_target_data( a )->dots );
+        auto dot_b     = std::invoke( dot, get_target_data( b )->dots );
+        auto remains_a = dot_a ? dot_a->remains() : timespan_t::zero();
+        auto remains_b = dot_b ? dot_b->remains() : timespan_t::zero();
+        return remains_a < remains_b;
       } );
     }
     else
     {
       // prioritize undotted over dotted
       std::partition( tl.begin(), tl.end(), [ this, &dot ]( player_t* t ) {
-        return !std::invoke( dot, get_target_data( t )->dots )->is_ticking();
+        auto d = std::invoke( dot, get_target_data( t )->dots );
+        return !d || !d->is_ticking();
       } );
     }
   }
