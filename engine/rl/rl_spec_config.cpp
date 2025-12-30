@@ -70,6 +70,39 @@ void init_spec_configs()
                                     },
                                     RESOURCE_COMBO_POINT };
 
+  g_spec_configs[ DRUID_GUARDIAN ] = { // Player buffs to track (order matters - defines observation indices)
+                                       {
+                                           // Form buffs (for stance tracking)
+                                           "bear_form",
+                                           "cat_form",
+                                           "moonkin_form",
+                                           // Combat buffs
+                                           "barkskin",
+                                           "feline_potential_counter",
+                                           "feline_potential",
+                                           "galactic_guardian",
+                                           "gore",
+                                           "heart_of_the_wild",
+                                           "incarnation_guardian_of_ursoc",
+                                           "berserk_bear",
+                                           "ironfur",
+                                           "prowl",
+                                           "ravage",
+                                           "tooth_and_claw",
+                                           "vicious_cycle_maul",
+                                           "vicious_cycle_mangle",
+                                           "lunar_beam",
+                                           "rage_of_the_sleeper",
+                                           "gory_fur",
+                                       },
+                                       // Dots on target to track
+                                       {
+                                           "thrash_bear",
+                                           "mangle_bear",
+                                           "adaptive_swarm_damage",
+                                       },
+                                       RESOURCE_COMBO_POINT };
+
   // ============================================================================
   // TODO: Add other specs as needed
   // ============================================================================
