@@ -479,6 +479,7 @@ struct player_t : public actor_t
   std::vector<action_t*> rl_action_list;                              // cached RL action space (built once)
   std::vector<std::string> rl_action_labels;                          // cached RL action labels
   std::vector<action_t*> rl_wait_actions;                             // wait actions for RL pseudo-actions
+  action_t* rl_pass_action = nullptr;                                 // pass action for RL pseudo-action
   rl::observation_t rl_prev_observation;                              // previous observation for reward shaping
   bool rl_prev_observation_valid = false;                             // true after first step
   double dpr;

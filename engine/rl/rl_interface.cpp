@@ -9,10 +9,13 @@
 #include "action/action.hpp"
 #include "action/dot.hpp"
 #include "buff/buff.hpp"
+#include "dbc/active_spells.hpp"
+#include "dbc/trait_data.hpp"
 #include "player/player.hpp"
 #include "sim/cooldown.hpp"
 #include "sim/sim.hpp"
 #include "util/io.hpp"
+#include "util/util.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -31,6 +34,16 @@ constexpr double WAIT_DURATIONS[]             = { 0.1, 0.2, 0.5, 1.0, 1.5 };
 constexpr std::size_t NUM_WAIT_PSEUDO_ACTIONS = sizeof( WAIT_DURATIONS ) / sizeof( WAIT_DURATIONS[ 0 ] );
 
 const char* WAIT_LABELS[] = { "wait_0.1", "wait_0.2", "wait_0.5", "wait_1.0", "wait_1.5" };
+
+// ============================================================================
+// Pass pseudo-action
+// ============================================================================
+// A "pass" action that does nothing and has zero duration.
+// This allows the RL agent to skip a decision point, e.g., when the only
+// available action is cancelform immediately after shapeshifting.
+// The pass action is always legal in FOREGROUND context.
+constexpr std::size_t NUM_PASS_PSEUDO_ACTIONS = 1;
+const char* PASS_LABEL                        = "pass";
 
 // ============================================================================
 // Reward shaping
@@ -116,6 +129,195 @@ io::ofstream* get_trace_stream( const sim_t& sim )
     return nullptr;
 
   return tl_trace_stream.get();
+}
+
+// ============================================================================
+// Universal utility actions (available to all classes)
+// ============================================================================
+// These are special actions that exist in create_action() but not in DBC spell data.
+// They should be created for all classes to enable form cancellation, auto-attacks, etc.
+const std::vector<std::string> UNIVERSAL_UTILITY_ACTIONS = {
+    "auto_attack",  // Melee auto-attack (all melee specs)
+    "cancelform",   // Cancel current shapeshift form (druids)
+    "cancel_buff",  // Cancel a buff (general utility)
+};
+
+// ============================================================================
+// Baseline action discovery from DBC
+// ============================================================================
+
+/// Discover all available class/spec actions from DBC spell data.
+/// Returns a set of tokenized action names that should be available.
+std::set<std::string> discover_class_actions( const player_t& player )
+{
+  std::set<std::string> action_names;
+
+  const bool ptr              = player.is_ptr();
+  const unsigned class_id     = static_cast<unsigned>( util::class_id( player.type ) );
+  const specialization_e spec = player.specialization();
+  const unsigned spec_id      = static_cast<unsigned>( spec );
+
+  // 1. Get baseline spells from active_class_spell_t
+  // These are core class abilities that are always available
+  for ( const auto& spell : active_class_spell_t::data( ptr ) )
+  {
+    if ( spell.class_id != class_id )
+      continue;
+
+    // spec_id == 0 means available to all specs of this class
+    // Otherwise, must match the player's specialization
+    if ( spell.spec_id != 0 && spell.spec_id != spec_id )
+      continue;
+
+    // Skip invalid/empty names
+    if ( !spell.name || spell.name[ 0 ] == '\0' )
+      continue;
+
+    // Tokenize the spell name (convert to lowercase, replace spaces with underscores)
+    std::string tokenized = util::tokenize_fn( spell.name );
+    if ( !tokenized.empty() )
+      action_names.insert( tokenized );
+  }
+
+  // 2. Get talent spells from trait_data_t (class tree, spec tree, hero tree)
+  for ( auto tree : { talent_tree::CLASS, talent_tree::SPECIALIZATION, talent_tree::HERO } )
+  {
+    for ( const auto& trait : trait_data_t::data( class_id, tree, ptr ) )
+    {
+      // Skip traits without associated spells
+      if ( trait.id_spell == 0 )
+        continue;
+
+      // Skip invalid/empty names
+      if ( !trait.name || trait.name[ 0 ] == '\0' )
+        continue;
+
+      // Check if this trait is available to the player's spec
+      // id_spec[0] == 0 means available to all specs
+      bool spec_matches = ( trait.id_spec[ 0 ] == 0 );
+      if ( !spec_matches )
+      {
+        for ( unsigned i = 0; i < trait.id_spec.size(); ++i )
+        {
+          if ( trait.id_spec[ i ] == spec_id )
+          {
+            spec_matches = true;
+            break;
+          }
+        }
+      }
+
+      if ( !spec_matches )
+        continue;
+
+      // Tokenize the trait name
+      std::string tokenized = util::tokenize_fn( trait.name );
+      if ( !tokenized.empty() )
+        action_names.insert( tokenized );
+    }
+  }
+
+  // 3. Add universal utility actions
+  for ( const auto& action_name : UNIVERSAL_UTILITY_ACTIONS )
+  {
+    action_names.insert( action_name );
+  }
+
+  return action_names;
+}
+
+/// Name of the synthetic APL used to mark RL-created baseline actions.
+/// Actions with action_list pointing to this APL will pass the is_exposed_action filter.
+constexpr const char* RL_BASELINE_APL_NAME = "_rl_baseline";
+
+/// Create baseline actions for RL that aren't in the APL.
+/// This iterates over discovered class/spec actions and creates any that don't already exist.
+/// Actions are marked with a synthetic APL pointer so they pass is_exposed_action().
+void create_baseline_actions( player_t& player )
+{
+  // Get or create the synthetic APL for RL baseline actions
+  action_priority_list_t* rl_apl = player.get_action_priority_list( RL_BASELINE_APL_NAME );
+
+  // Discover all actions this class/spec should have access to
+  std::set<std::string> discovered_actions = discover_class_actions( player );
+
+  // Track which actions already exist (by name)
+  std::set<std::string> existing_action_names;
+  for ( action_t* a : player.action_list )
+  {
+    if ( a )
+      existing_action_names.insert( a->name_str );
+  }
+
+  // Remember the current action_list size before we start creating
+  const std::size_t initial_action_count = player.action_list.size();
+
+  // Collect newly created foreground actions so we can mark them with the RL APL
+  std::vector<action_t*> new_foreground_actions;
+
+  // Create actions that don't already exist
+  for ( const std::string& action_name : discovered_actions )
+  {
+    // Skip if already exists
+    if ( existing_action_names.count( action_name ) )
+      continue;
+
+    // Attempt to create the action
+    // create_action returns nullptr if the action name isn't recognized
+    action_t* a = player.create_action( action_name, "" );
+    if ( !a )
+      continue;  // Silently skip unrecognized actions
+
+    // Skip background/proc/dual actions - these are internal
+    if ( a->background || a->proc || a->dual )
+      continue;
+
+    // Mark this action with the RL baseline APL so it passes is_exposed_action
+    a->action_list = rl_apl;
+
+    new_foreground_actions.push_back( a );
+  }
+
+  // Initialize ALL newly created actions (including secondary/child actions).
+  // When we create foreground actions like "starsurge", they may internally create
+  // secondary actions (like "starfire", splash effects, etc.) via get_secondary_action.
+  // These secondary actions are also added to player.action_list and need initialization.
+  // We iterate from initial_action_count to cover all newly added actions.
+  for ( std::size_t i = initial_action_count; i < player.action_list.size(); ++i )
+  {
+    action_t* a = player.action_list[ i ];
+    if ( !a )
+      continue;
+
+    // Skip already initialized actions
+    if ( a->initialized )
+      continue;
+
+    try
+    {
+      // Call init() to set up the action (sets initialized = true, among other things)
+      a->init();
+    }
+    catch ( const std::exception& e )
+    {
+      // If init fails, mark as background so it won't be exposed
+      a->background = true;
+      std::cout << "Warning: RL baseline action '" << a->name_str << "' initialization failed: " << e.what() << "\n";
+      continue;
+    }
+
+    try
+    {
+      // Call init_finished() to finalize the action
+      a->init_finished();
+    }
+    catch ( const std::exception& e )
+    {
+      // If init_finished fails, mark as background so it won't be exposed
+      a->background = true;
+      std::cout << "Warning: RL baseline action '" << a->name_str << "' finalization failed: " << e.what() << "\n";
+    }
+  }
 }
 
 // ============================================================================
@@ -518,6 +720,12 @@ void build_action_list( const player_t& player, std::vector<action_t*>& out_acti
   out_actions.clear();
   out_labels.clear();
 
+  // First, create baseline actions from DBC data that aren't in the APL.
+  // This ensures all class/spec abilities are available to the RL agent.
+  // Note: const_cast is safe here because we're adding actions to the player's
+  // action_list during initialization, which is a one-time setup operation.
+  create_baseline_actions( const_cast<player_t&>( player ) );
+
   std::set<std::string> seen_names;
 
   for ( action_t* a : player.action_list )
@@ -543,6 +751,11 @@ void build_action_list( const player_t& player, std::vector<action_t*>& out_acti
     out_actions.push_back( nullptr );  // No actual action_t for pseudo-actions
     out_labels.push_back( WAIT_LABELS[ i ] );
   }
+
+  // Append pass pseudo-action (nullptr action pointer, special label)
+  // This allows the RL agent to skip a decision point.
+  out_actions.push_back( nullptr );
+  out_labels.push_back( PASS_LABEL );
 }
 
 std::size_t get_num_wait_pseudo_actions()
@@ -555,6 +768,25 @@ double get_wait_pseudo_action_duration( std::size_t pseudo_index )
   if ( pseudo_index < NUM_WAIT_PSEUDO_ACTIONS )
     return WAIT_DURATIONS[ pseudo_index ];
   return 0.0;
+}
+
+std::size_t get_num_pass_pseudo_actions()
+{
+  return NUM_PASS_PSEUDO_ACTIONS;
+}
+
+std::size_t get_total_pseudo_actions()
+{
+  return NUM_WAIT_PSEUDO_ACTIONS + NUM_PASS_PSEUDO_ACTIONS;
+}
+
+bool is_pass_pseudo_action( std::size_t action_index, std::size_t total_actions )
+{
+  // Pass action is the very last pseudo-action (after all wait actions)
+  const std::size_t num_pseudo   = get_total_pseudo_actions();
+  const std::size_t real_actions = total_actions - num_pseudo;
+  const std::size_t pass_index   = real_actions + NUM_WAIT_PSEUDO_ACTIONS;
+  return action_index == pass_index;
 }
 
 // ============================================================================
@@ -577,11 +809,22 @@ void update_action_features( const player_t& player, execute_type context, util:
   {
     action_t* a = actions[ i ];
 
-    // Handle wait pseudo-actions (nullptr action pointers)
+    // Handle wait/pass pseudo-actions (nullptr action pointers)
     if ( a == nullptr )
     {
-      // Wait pseudo-actions are legal in FOREGROUND context, never in OFF_GCD or CWC
-      bool legal               = ( context == execute_type::FOREGROUND );
+      bool legal = false;
+      if ( is_pass_pseudo_action( i, n ) )
+      {
+        // Pass pseudo-action is always legal in any context.
+        // This allows the RL agent to skip decision points (e.g., after shapeshifting).
+        legal = true;
+      }
+      else
+      {
+        // Wait pseudo-actions are only legal in FOREGROUND context.
+        // During OFF_GCD/CWC, wait doesn't make sense as these are instant windows.
+        legal = ( context == execute_type::FOREGROUND );
+      }
       out_mask[ i ]            = static_cast<uint8_t>( legal ? 1 : 0 );
       out_cd_remains_s[ i ]    = 0.0;
       out_cd_remains_norm[ i ] = 0.0;
@@ -631,6 +874,8 @@ void update_action_features( const player_t& player, execute_type context, util:
       }
 
       // Check game legality: cooldown/resources/target
+      // We trust simc's action_t::ready() to handle all class-specific checks
+      // including druid form requirements, fluid form talent, autoshift, etc.
       player_t* t = a->target ? a->target : a->player->target;
       legal       = a->ready() && t && a->target_ready( t );
     }

@@ -118,7 +118,7 @@ observation_t build_observation( const player_t& player );
 
 /// Build the static action list (call once per player, at first RL decision).
 /// Deduplicates by ability name; populates actions and labels.
-/// Appends wait pseudo-actions (with nullptr action pointers) at the end.
+/// Appends wait pseudo-actions and pass pseudo-action (with nullptr action pointers) at the end.
 void build_action_list( const player_t& player, std::vector<action_t*>& out_actions,
                         std::vector<std::string>& out_labels );
 
@@ -128,6 +128,17 @@ std::size_t get_num_wait_pseudo_actions();
 /// Get the wait duration for a pseudo-action (0-indexed from the start of pseudo-actions).
 /// Returns 0.0 if the index is out of range.
 double get_wait_pseudo_action_duration( std::size_t pseudo_index );
+
+/// Get the number of pass pseudo-actions (currently always 1).
+std::size_t get_num_pass_pseudo_actions();
+
+/// Get the total number of pseudo-actions (wait + pass).
+std::size_t get_total_pseudo_actions();
+
+/// Check if a given action index is the pass pseudo-action.
+/// @param action_index The index of the action in the action list.
+/// @param total_actions The total number of actions including all pseudo-actions.
+bool is_pass_pseudo_action( std::size_t action_index, std::size_t total_actions );
 
 /// Update the mask and per-action features for the current game state.
 /// The execute_type determines which actions are valid in the current context.

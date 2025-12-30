@@ -528,11 +528,13 @@ static std::function<int( actor_target_data_t* )> d_fn( T d, bool stack = true )
   {
     if ( stack )
       return [ d ]( actor_target_data_t* t ) {
-        return std::invoke( d, static_cast<druid_td_t*>( t )->dots )->current_stack();
+        auto dot = std::invoke( d, static_cast<druid_td_t*>( t )->dots );
+        return dot ? dot->current_stack() : 0;
       };
     else
       return [ d ]( actor_target_data_t* t ) {
-        return std::invoke( d, static_cast<druid_td_t*>( t )->dots )->is_ticking();
+        auto dot = std::invoke( d, static_cast<druid_td_t*>( t )->dots );
+        return dot ? dot->is_ticking() : false;
       };
   }
   else

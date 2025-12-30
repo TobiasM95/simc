@@ -14288,6 +14288,32 @@ struct rl_wait_action_t : public action_t
   }
 };
 
+// RL Pass Action: a no-op action with zero duration that allows skipping a decision point.
+// This is useful when the only available action is something the agent doesn't want to do
+// (e.g., cancelform immediately after shapeshifting).
+struct rl_pass_action_t : public action_t
+{
+  rl_pass_action_t( player_t* p ) : action_t( ACTION_OTHER, "rl_pass", p, spell_data_t::nil() )
+  {
+    trigger_gcd           = timespan_t::zero();
+    harmful               = false;
+    interrupt_auto_attack = false;
+    quiet                 = true;
+    target                = p;
+  }
+
+  void execute() override
+  {
+    // No-op: just increment execution count for stats
+    total_executions++;
+  }
+
+  timespan_t execute_time() const override
+  {
+    return timespan_t::zero();
+  }
+};
+
 // Note, root call needs to set player_t::visited_apls_ to 0
 action_t* player_t::select_action( const action_priority_list_t& list, execute_type et, const action_t* context )
 {
@@ -14309,6 +14335,9 @@ action_t* player_t::select_action( const action_priority_list_t& list, execute_t
       {
         rl_wait_actions.push_back( new rl_wait_action_t( this, rl::get_wait_pseudo_action_duration( i ) ) );
       }
+
+      // Create pass action (zero-duration no-op)
+      rl_pass_action = new rl_pass_action_t( this );
 
       // If stdio bridge is enabled, activate the stdio policy
       if ( sim->rl_stdio )
@@ -14378,12 +14407,20 @@ action_t* player_t::select_action( const action_priority_list_t& list, execute_t
 
     if ( chosen < rl_action_list.size() && rl_mask[ chosen ] )
     {
-      // Check if this is a wait pseudo-action (nullptr in rl_action_list)
+      // Check if this is a pseudo-action (nullptr in rl_action_list)
       if ( rl_action_list[ chosen ] == nullptr )
       {
-        // Calculate which wait pseudo-action index this is
-        const std::size_t num_wait     = rl::get_num_wait_pseudo_actions();
-        const std::size_t real_actions = rl_action_list.size() - num_wait;
+        // Check if it's the pass pseudo-action (last pseudo-action)
+        if ( rl::is_pass_pseudo_action( chosen, rl_action_list.size() ) )
+        {
+          // Return nullptr for pass - this tells the sim "no action selected"
+          // which triggers the normal resource-based waiting behavior.
+          // This avoids infinite loops from zero-duration actions.
+          return nullptr;
+        }
+        // Otherwise it's a wait pseudo-action
+        const std::size_t num_pseudo   = rl::get_total_pseudo_actions();
+        const std::size_t real_actions = rl_action_list.size() - num_pseudo;
         const std::size_t wait_idx     = chosen - real_actions;
         return rl_wait_actions[ wait_idx ];
       }
@@ -14397,8 +14434,15 @@ action_t* player_t::select_action( const action_priority_list_t& list, execute_t
       {
         if ( rl_action_list[ i ] == nullptr )
         {
-          const std::size_t num_wait     = rl::get_num_wait_pseudo_actions();
-          const std::size_t real_actions = rl_action_list.size() - num_wait;
+          // Check if it's the pass pseudo-action (last pseudo-action)
+          if ( rl::is_pass_pseudo_action( i, rl_action_list.size() ) )
+          {
+            // Return nullptr for pass - triggers normal wait behavior
+            return nullptr;
+          }
+          // Otherwise it's a wait pseudo-action
+          const std::size_t num_pseudo   = rl::get_total_pseudo_actions();
+          const std::size_t real_actions = rl_action_list.size() - num_pseudo;
           const std::size_t wait_idx     = i - real_actions;
           return rl_wait_actions[ wait_idx ];
         }
