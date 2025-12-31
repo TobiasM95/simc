@@ -40,6 +40,23 @@ from gymnasium import spaces
 # Base GCD for normalization (1.5 seconds is the default GCD before haste)
 BASE_GCD_SECONDS = 1.5
 
+# blacklist to exclude certaion actions inside the python gym environment
+# these don't get masked out but instead are removed from the action space entirely
+GLOBAL_ACTION_BLACKLIST = {
+    "invoke_external_buff",
+    "snapshot_stats",
+    "cancel_buff",
+    "use_item_arazs_ritual_forge",
+    "do_treacherous_transmitter_task",
+    "run_action_list",
+    "entangling_roots",
+    "shred",
+    "rake",
+    "skull_bash",
+    "cat_form",
+    "rip",
+}
+
 
 class SimcEnv(gym.Env):
     """
@@ -674,15 +691,7 @@ def run_demo(args):
     env = SimcEnv(
         simc_path=args.simc,
         profile=args.profile,
-        action_blacklist={
-            "invoke_external_buff",
-            "snapshot_stats",
-            "cancel_buff",
-            "use_item_arazs_ritual_forge",
-            "do_treacherous_transmitter_task",
-            "run_action_list",
-            "entangling_roots",
-        },
+        action_blacklist=GLOBAL_ACTION_BLACKLIST,
     )
 
     for ep in range(args.episodes):
@@ -729,13 +738,7 @@ def run_single_thread_sb3(args):
     env = SimcEnv(
         simc_path=args.simc,
         profile=args.profile,
-        action_blacklist={
-            "invoke_external_buff",
-            "snapshot_stats",
-            "cancel_buff",
-            "use_item_arazs_ritual_forge",
-            "do_treacherous_transmitter_task",
-        },
+        action_blacklist=GLOBAL_ACTION_BLACKLIST,
     )
 
     # Train with MaskablePPO (action masking)
@@ -787,21 +790,12 @@ def run_multi_thread_sb3(args):
     print(f"Num envs: {num_envs}")
     print(f"Total timesteps: {total_timesteps:,}")
 
-    # === Environment Setup ===
-    action_blacklist = {
-        "invoke_external_buff",
-        "snapshot_stats",
-        "cancel_buff",
-        "use_item_arazs_ritual_forge",
-        "do_treacherous_transmitter_task",
-    }
-
     def make_env(seed: int):
         def _init():
             env = SimcEnv(
                 simc_path=args.simc,
                 profile=args.profile,
-                action_blacklist=action_blacklist,
+                action_blacklist=GLOBAL_ACTION_BLACKLIST,
                 seed=seed,
                 intermediate_rewards=True,  # Enable intermediate rewards for learning signal
             )
@@ -1078,20 +1072,11 @@ def run_evaluation(args):
 
     print(f"Loading model from {model_path}")
 
-    # === Create a dummy env to load the model with correct observation space ===
-    action_blacklist = {
-        "invoke_external_buff",
-        "snapshot_stats",
-        "cancel_buff",
-        "use_item_arazs_ritual_forge",
-        "do_treacherous_transmitter_task",
-    }
-
     # Create a probe env to get observation/action space dimensions
     probe_env = SimcEnv(
         simc_path=args.simc,
         profile=args.profile,
-        action_blacklist=action_blacklist,
+        action_blacklist=GLOBAL_ACTION_BLACKLIST,
         iterations=1,  # Just for probing
     )
     obs_space = probe_env.observation_space
