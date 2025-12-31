@@ -1,0 +1,39 @@
+html="./output.html"
+output="./output.txt"
+
+max_time=300
+# vary_combat_length=0.2
+# fixed_time=1
+iterations=1
+fight_style=Patchwerk
+# desired_error=0.02
+threads=1
+# calculate_scale_factors=0
+# report_details=1
+# debug=1
+
+druid="TWW3_Druid_Guardian"
+source=default
+spec=guardian
+level=80
+race=night_elf
+timeofday=night
+role=tank
+position=front
+talents=CgGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzYmZmZWmBzMDGLmhZsYZGwgRTmmZmFjZMGDGAAAAAYGGmBGAAAomZbWmZWGAALMGDwiZwA
+
+head=skymane_of_the_mother_eagle,id=237682,bonus_id=12361/10356/12231/40/12921/12676/1533/10255/1808,gem_id=213743
+neck=cabochon_of_the_infinite_flight,id=185820,bonus_id=10035/12361/12239/8781,gem_id=213461/213461
+shoulders=ritual_pauldrons_of_the_mother_eagle,id=237680,bonus_id=12361/10356/12233/40/12675/1533/10255
+back=reshii_wraps,id=235499,bonus_id=12401/9893,gem_id=238044,enchant_id=7409
+chest=vest_of_the_mother_eagle,id=237685,bonus_id=12361/10356/12229/40/12676/1533/10255,enchant_id=7364
+wrists=runebranded_armbands,id=219334,bonus_id=10421/9633/8902/12053/12050/1485/1808/11303/8960,gem_id=213461,enchant_id=7391,crafted_stats=49/36
+hands=winged_gamma_handlers,id=237540,bonus_id=1533/12361/12239
+waist=runebranded_waistband,id=219331,bonus_id=10421/9633/8902/12053/12050/1485/1808/11303/8960,gem_id=213482,crafted_stats=49/36
+legs=breeches_of_the_mother_eagle,id=237681,bonus_id=12361/10356/12232/40/12676/1533/10255,enchant_id=7595
+feet=feathered_boots_of_the_mother_eagle,id=237684,bonus_id=1533/12361,enchant_id=7418
+finger1=band_of_the_shattered_soul,id=242405,bonus_id=1533/12361/12239/8781,gem_id=213470/213467,enchant_id=7340
+finger2=high_nerubian_signet,id=221141,bonus_id=3215/12361/12239/8781,gem_id=213494/213491,enchant_id=7340
+trinket1=ticking_sack_of_terror,id=190652,bonus_id=4786/10035/12361
+trinket2=tome_of_lights_devotion,id=219309,bonus_id=3215/12361/12239
+main_hand=harvesters_interdiction,id=221159,bonus_id=3215/12361/12239,enchant_id=7448

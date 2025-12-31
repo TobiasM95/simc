@@ -135,9 +135,11 @@ io::ofstream* get_trace_stream( const sim_t& sim )
 // Universal utility actions (available to all classes)
 // ============================================================================
 // These are special actions that exist in create_action() but not in DBC spell data.
-// They should be created for all classes to enable form cancellation, auto-attacks, etc.
+// They should be created for all classes to enable form cancellation, etc.
+// Note: auto_attack is NOT included here because each class has its own implementation
+// (e.g., druid's auto_attack_t vs enemy's auto_attack_t) and it should be discovered
+// from the class's DBC data or APL instead.
 const std::vector<std::string> UNIVERSAL_UTILITY_ACTIONS = {
-    "auto_attack",  // Melee auto-attack (all melee specs)
     "cancelform",   // Cancel current shapeshift form (druids)
     "cancel_buff",  // Cancel a buff (general utility)
 };
@@ -235,6 +237,11 @@ constexpr const char* RL_BASELINE_APL_NAME = "_rl_baseline";
 /// Actions are marked with a synthetic APL pointer so they pass is_exposed_action().
 void create_baseline_actions( player_t& player )
 {
+  // Defense-in-depth: Don't create baseline actions for enemies or pets.
+  // These should never reach here due to the check in select_action, but guard anyway.
+  if ( player.is_enemy() || player.is_pet() )
+    return;
+
   // Get or create the synthetic APL for RL baseline actions
   action_priority_list_t* rl_apl = player.get_action_priority_list( RL_BASELINE_APL_NAME );
 

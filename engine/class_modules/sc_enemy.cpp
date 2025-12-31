@@ -167,7 +167,8 @@ struct enemy_action_t : public ACTION_TYPE
 
   virtual void set_name_string()
   {
-    this->name_str = this->name_str + "_" + this->target->name();
+    if ( this->target )
+      this->name_str = this->name_str + "_" + this->target->name();
   }
 
   // this is only used by helper structures
@@ -728,8 +729,7 @@ struct spell_dot_t : public enemy_action_t<spell_t>
 {
   bool is_bleed;
 
-  spell_dot_t( player_t* p, util::string_view options_str ) :
-    base_t( "spell_dot", p ), is_bleed( false )
+  spell_dot_t( player_t* p, util::string_view options_str ) : base_t( "spell_dot", p ), is_bleed( false )
   {
     school            = SCHOOL_FIRE;
     base_tick_time    = timespan_t::from_seconds( 1.0 );
@@ -867,9 +867,9 @@ struct summon_add_t : public spell_t
     add_option( opt_timespan( "cooldown", cooldown->duration ) );
     parse_options( options_str );
 
-    school = SCHOOL_PHYSICAL;
-    pet = p->find_pet( add_name );
-    harmful = false;
+    school      = SCHOOL_PHYSICAL;
+    pet         = p->find_pet( add_name );
+    harmful     = false;
     trigger_gcd = 1.5_s;
   }
 
@@ -935,9 +935,9 @@ struct pause_action_t : public action_t
     parse_options( options_str );
 
     // Set the cooldown and stats' name to the action's custom name
-    internal_id        = p->get_action_id( name_str );
-    cooldown           = p->get_cooldown( name_str );
-    stats              = p->get_stats( name_str, this );
+    internal_id = p->get_action_id( name_str );
+    cooldown    = p->get_cooldown( name_str );
+    stats       = p->get_stats( name_str, this );
 
     // Default duration and cooldown to 30s, and min/max to 0.5x and 1.5x.
     // Some sanity checks as well
@@ -978,7 +978,7 @@ struct pause_action_t : public action_t
       _cooldown.stddev = 0_s;
     }
 
-    base_execute_time = _duration.mean;
+    base_execute_time  = _duration.mean;
     cooldown->duration = _cooldown.mean;
   }
 
@@ -1330,7 +1330,7 @@ bool enemy_t::validate_custom_timeline()
     return false;
   }
 
-  range::sort( custom_health_timeline, [] ( const auto& l, const auto& r ) { return l.second < r.second; } );
+  range::sort( custom_health_timeline, []( const auto& l, const auto& r ) { return l.second < r.second; } );
 
   if ( custom_health_timeline.front().second < 0.0 || custom_health_timeline.back().second > 1.0 )
   {
@@ -1369,7 +1369,7 @@ void enemy_t::init_defense()
 {
   player_t::init_defense();
 
-  collected_data.health_changes.collect     = false;
+  collected_data.health_changes.collect = false;
 
   if ( ( total_gear.armor ) <= 0 )
   {
@@ -1466,23 +1466,26 @@ std::string enemy_t::generate_tank_action_list( tank_dummy_e tank_dummy )
   // Defaulted to 20-man damage
   // Damage is normally increased from 10-man to 30-man by an average of 10% for every 5 players added.
   // 10-man -> 20-man = 20% increase; 20-man -> 30-man = 20% increase
-  // Calculated by computing (M / <difficulty>) pre-mitigation (U) melee swings for all difficulties from Kazzara - Aberrus.
-  // A Normal Dungeon estimate was then added below LFR. Prior to this update, it was approximately 3.9, but the rest of the
-  // values were a bit lower, so this one was also lowered.
+  // Calculated by computing (M / <difficulty>) pre-mitigation (U) melee swings for all difficulties from Kazzara -
+  // Aberrus. A Normal Dungeon estimate was then added below LFR. Prior to this update, it was approximately 3.9, but
+  // the rest of the values were a bit lower, so this one was also lowered.
   constexpr std::array<double, numTankDummies> tank_dummy_index_scalar = { 0, 6.5, 4.0, 2.5, 1.6, 1 };
-  constexpr double aa_damage_base        = 30'000'000;
-  constexpr double dummy_strike_base     = aa_damage_base * 2.5;
-  constexpr double background_spell_base = aa_damage_base * 0.1;
+  constexpr double aa_damage_base                                      = 30'000'000;
+  constexpr double dummy_strike_base                                   = aa_damage_base * 2.5;
+  constexpr double background_spell_base                               = aa_damage_base * 0.1;
 
   size_t tank_dummy_index = static_cast<size_t>( tank_dummy );
-  als += "/auto_attack,damage=" + util::to_string( floor( aa_damage_base / tank_dummy_index_scalar[ tank_dummy_index ] ) ) +
+  als += "/auto_attack,damage=" +
+         util::to_string( floor( aa_damage_base / tank_dummy_index_scalar[ tank_dummy_index ] ) ) +
          ",range=" + util::to_string( aa_damage_base / tank_dummy_index_scalar[ tank_dummy_index ] * 0.02 ) +
          ",attack_speed=2,aoe_tanks=1";
-  als += "/melee_nuke,damage=" + util::to_string( floor( dummy_strike_base / tank_dummy_index_scalar[ tank_dummy_index ] ) ) +
-         ",range=" + util::to_string( floor( dummy_strike_base / tank_dummy_index_scalar[ tank_dummy_index ] * 0.02 ) ) +
+  als += "/melee_nuke,damage=" +
+         util::to_string( floor( dummy_strike_base / tank_dummy_index_scalar[ tank_dummy_index ] ) ) + ",range=" +
+         util::to_string( floor( dummy_strike_base / tank_dummy_index_scalar[ tank_dummy_index ] * 0.02 ) ) +
          ",attack_speed=2,cooldown=30,aoe_tanks=1";
-  als += "/spell_dot,damage=" + util::to_string( floor( background_spell_base / tank_dummy_index_scalar[ tank_dummy_index ] ) ) +
-         ",range=" + util::to_string( floor( background_spell_base / tank_dummy_index_scalar[ tank_dummy_index ] * 0.02 ) ) +
+  als += "/spell_dot,damage=" +
+         util::to_string( floor( background_spell_base / tank_dummy_index_scalar[ tank_dummy_index ] ) ) + ",range=" +
+         util::to_string( floor( background_spell_base / tank_dummy_index_scalar[ tank_dummy_index ] * 0.02 ) ) +
          ",tick_time=2,cooldown=60,aoe_tanks=1,dot_duration=60,bleed=1";
   // pause periodically to mimic a tank swap
   als += "/pause_action,duration=30,cooldown=30,if=time>=30";
@@ -1496,10 +1499,11 @@ void enemy_t::add_tank_heal_raid_event( tank_dummy_e tank_dummy )
   constexpr size_t numTankDummies = static_cast<size_t>( tank_dummy_e::MAX );
   //                                           NONE, WEAK, DUNGEON, RAID,  HEROIC, MYTHIC
   constexpr std::array<double, numTankDummies> tank_dummy_index_scalar = { 0, 6.5, 4.0, 2.5, 1.6, 1 };
-  constexpr int heal_value_base = 1'500'000;
-  size_t tank_dummy_index                    = static_cast<size_t>( tank_dummy );
-  std::string heal_raid_event = fmt::format( "heal,name=tank_heal,amount={},cooldown=5.0,duration=0,player_if=role.tank",
-                                             heal_value_base / tank_dummy_index_scalar[ tank_dummy_index ] );
+  constexpr int heal_value_base                                        = 1'500'000;
+  size_t tank_dummy_index                                              = static_cast<size_t>( tank_dummy );
+  std::string heal_raid_event =
+      fmt::format( "heal,name=tank_heal,amount={},cooldown=5.0,duration=0,player_if=role.tank",
+                   heal_value_base / tank_dummy_index_scalar[ tank_dummy_index ] );
   sim->raid_events_str += "/" + heal_raid_event;
   std::string::size_type cut_pt = heal_raid_event.find_first_of( ',' );
   auto heal_options             = heal_raid_event.substr( cut_pt + 1 );
@@ -1509,12 +1513,12 @@ void enemy_t::add_tank_heal_raid_event( tank_dummy_e tank_dummy )
   if ( raid_event->cooldown.mean <= 0_ms )
   {
     throw std::invalid_argument(
-      fmt::format( "Tank heal raid event '{}', cooldown not set or negative.", heal_options ) );
+        fmt::format( "Tank heal raid event '{}', cooldown not set or negative.", heal_options ) );
   }
   if ( raid_event->cooldown.mean <= raid_event->cooldown.stddev )
   {
-    throw std::invalid_argument(
-      fmt::format( "Tank heal raid event '{}', cooldown mean lower than cooldown standard deviation.", heal_options ) );
+    throw std::invalid_argument( fmt::format(
+        "Tank heal raid event '{}', cooldown mean lower than cooldown standard deviation.", heal_options ) );
   }
 
   if ( raid_event->cooldown.min == 0_ms )
@@ -1683,19 +1687,18 @@ void enemy_t::create_options()
   add_option( opt_string( "enemy_tank", target_str ) );
   add_option( opt_int( "apply_debuff", apply_damage_taken_debuff ) );
 
-  add_option( opt_func( "enemy_custom_health_timeline", [ this ] ( sim_t*, std::string_view, std::string_view val )
-  {
+  add_option( opt_func( "enemy_custom_health_timeline", [ this ]( sim_t*, std::string_view, std::string_view val ) {
     custom_health_timeline.clear();
 
     auto splits = util::string_split<std::string_view>( val, "/," );
     range::transform( splits, std::back_inserter( custom_health_timeline ),
-      []( std::string_view s ) -> std::pair<double, double> {
-        auto pair = util::string_split<std::string_view>( s, ":" );
-        if ( pair.size() == 2 )
-          return { util::to_double( pair[ 0 ] ), util::to_double( pair[ 1 ] ) };
-        else
-          throw std::invalid_argument( fmt::format( "Invalid custom health timeline pair '{}'.", s ) );
-      } );
+                      []( std::string_view s ) -> std::pair<double, double> {
+                        auto pair = util::string_split<std::string_view>( s, ":" );
+                        if ( pair.size() == 2 )
+                          return { util::to_double( pair[ 0 ] ), util::to_double( pair[ 1 ] ) };
+                        else
+                          throw std::invalid_argument( fmt::format( "Invalid custom health timeline pair '{}'.", s ) );
+                      } );
 
     return true;
   } ) );
@@ -1795,7 +1798,7 @@ timespan_t enemy_t::time_to_percent( double percent ) const
       if ( percent < std::min( left.first, right.first ) || percent > std::max( left.first, right.first ) )
         continue;
 
-      double intersect = left.first == right.first ? 0.0 : ( percent - left.first ) / ( right.first - left.first );
+      double intersect      = left.first == right.first ? 0.0 : ( percent - left.first ) / ( right.first - left.first );
       double intersect_time = left.second + intersect * ( right.second - left.second );
       if ( left.first != right.first && intersect_time < time )
         continue;
