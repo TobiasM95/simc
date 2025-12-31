@@ -17,7 +17,7 @@ This README documents what the code currently does (hook points, filtering rules
 
 The Gymnasium wrapper lives at `engine/rl/python_rl_env/rl_bridge.py`.
 
-From the repo root:
+From the repo root (if you use UV you have to use `uv run ...``` and don't forget to add a proper path to the simc executable):
 
 ```bash
 python -m pip install -r engine/rl/requirements.txt
