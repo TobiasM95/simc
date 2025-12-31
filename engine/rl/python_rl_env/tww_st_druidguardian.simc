@@ -1,5 +1,5 @@
-html="./output.html"
-output="./output.txt"
+# html="./output.html"
+# output="./output.txt"
 
 max_time=300
 # vary_combat_length=0.2

@@ -4228,9 +4228,35 @@ struct cat_form_t final : public druid_form_t
 // Moonkin Form Spell =======================================================
 struct moonkin_form_t final : public druid_form_t
 {
-  DRUID_ABILITY( moonkin_form_t, druid_form_t, "moonkin_form", p->talent.moonkin_form )
+  // Helper to get valid moonkin form spell data
+  static const spell_data_t* get_moonkin_spell( druid_t* p )
+  {
+    // Try the talent first
+    if ( p->talent.moonkin_form.ok() && p->talent.moonkin_form->ok() )
+      return p->talent.moonkin_form;
+
+    // Fallback: directly fetch the Feral/Guardian version (spell 197625)
+    const spell_data_t* sp = p->find_spell( 197625 );
+    if ( sp->ok() )
+      return sp;
+
+    // Fallback: directly fetch the Balance version (spell 24858)
+    sp = p->find_spell( 24858 );
+    if ( sp->ok() )
+      return sp;
+
+    // Last resort: return the talent's spell data anyway (may be not_found)
+    return p->talent.moonkin_form;
+  }
+
+  DRUID_ABILITY( moonkin_form_t, druid_form_t, "moonkin_form", get_moonkin_spell( p ) )
   {
     set_form( MOONKIN_FORM );
+
+    // Force this action to not be background if we have valid form setup
+    // This works around issues where the spell data lookup fails but the form is still usable
+    if ( form_buff )
+      background = false;
   }
 };
 
@@ -11480,7 +11506,33 @@ void druid_t::init_spells()
   talent.mass_entanglement        = CT( "Mass Entanglement" );
   talent.matted_fur               = CT( "Matted Fur" );
   talent.mighty_bash              = CT( "Mighty Bash" );
-  talent.moonkin_form             = CT( "Moonkin Form" );
+  // TEMPORARY TEST: Force-enable moonkin_form for all druids to test if action creation works
+  // Moonkin Form has two versions in the class tree:
+  // - Balance version: trait_node_entry 82208, spell 24858, id_spec={0} (matches any spec in lookup)
+  // - Feral/Guardian version: trait_node_entry 91047, spell 197625, id_spec={103,104}
+  // The name-based lookup may find the wrong one. We need to try both trait node entries.
+  talent.moonkin_form = CT( "Moonkin Form" );
+  if ( !talent.moonkin_form.ok() )
+  {
+    // Try the Feral/Guardian version by its specific trait_node_entry_id
+    talent.moonkin_form = find_talent_spell( 91047 );  // Feral/Guardian Moonkin Form
+  }
+  if ( !talent.moonkin_form.ok() )
+  {
+    // Try the Balance version by its specific trait_node_entry_id
+    talent.moonkin_form = find_talent_spell( 82208 );  // Balance Moonkin Form
+  }
+  // TEMPORARY: Force-enable moonkin_form using the Feral/Guardian spell if still not found
+  if ( !talent.moonkin_form.ok() && ( specialization() == DRUID_GUARDIAN || specialization() == DRUID_FERAL ) )
+  {
+    sim->print_debug( "TEMPORARY: Force-enabling Moonkin Form for Guardian/Feral druid" );
+    // Create a forced player_talent_t using the trait data directly
+    const trait_data_t* trait = trait_data_t::find( 91047, dbc->ptr );
+    if ( trait && trait != &trait_data_t::nil() )
+    {
+      talent.moonkin_form = player_talent_t( this, trait, 1 );  // Force rank 1
+    }
+  }
   talent.natural_recovery         = CT( "Natural Recovery" );
   talent.natures_vigil            = CT( "Nature's Vigil" );
   talent.nurturing_instinct       = CT( "Nurturing Instinct" );

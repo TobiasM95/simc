@@ -680,6 +680,8 @@ def run_demo(args):
             "cancel_buff",
             "use_item_arazs_ritual_forge",
             "do_treacherous_transmitter_task",
+            "run_action_list",
+            "entangling_roots",
         },
     )
 

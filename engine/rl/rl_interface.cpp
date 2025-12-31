@@ -219,7 +219,31 @@ std::set<std::string> discover_class_actions( const player_t& player )
     }
   }
 
-  // 3. Add universal utility actions
+  // 3. Discover actions from actually selected talents (including cross-spec)
+  // This catches talents that grant abilities from other specs, like Guardian Druid
+  // selecting the Moonkin Form talent from the Balance portion of the class tree.
+  for ( const auto& [ tree, trait_node_entry_id, rank ] : player.player_traits )
+  {
+    // Skip unselected talents (rank 0)
+    if ( rank == 0 )
+      continue;
+
+    // Look up the trait by its node entry ID
+    const trait_data_t* trait = trait_data_t::find( trait_node_entry_id, ptr );
+    if ( !trait || trait->id_spell == 0 )
+      continue;
+
+    // Skip invalid/empty names
+    if ( !trait->name || trait->name[ 0 ] == '\0' )
+      continue;
+
+    // Tokenize and add the trait name
+    std::string tokenized = util::tokenize_fn( trait->name );
+    if ( !tokenized.empty() )
+      action_names.insert( tokenized );
+  }
+
+  // 4. Add universal utility actions
   for ( const auto& action_name : UNIVERSAL_UTILITY_ACTIONS )
   {
     action_names.insert( action_name );
