@@ -103,6 +103,23 @@ void init_spec_configs()
                                        },
                                        RESOURCE_COMBO_POINT };
 
+  g_spec_configs[ WARLOCK_DESTRUCTION ] = { // Player buffs to track (order matters - defines observation indices)
+                                            {
+                                                "backdraft",
+                                                "crashing_chaos",
+                                                "decimation",
+                                                "flashpoint",
+                                                "impending_ruin",
+                                                "infernal_bolt",
+                                                "reverse_entropy",
+                                                "ritual_of_ruin",
+                                            },
+                                            // Dots on target to track
+                                            {
+                                                "immolate",
+                                            },
+                                            RESOURCE_SOUL_SHARD };
+
   // ============================================================================
   // TODO: Add other specs as needed
   // ============================================================================
