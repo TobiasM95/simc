@@ -55,6 +55,7 @@ GLOBAL_ACTION_BLACKLIST = {
     "skull_bash",
     "cat_form",
     "rip",
+    "cataclysm",
 }
 
 
@@ -751,6 +752,7 @@ def run_multi_thread_sb3(args):
     import pickle
     import time
     from pathlib import Path
+    from typing import Callable
 
     from sb3_contrib import MaskablePPO
     from stable_baselines3.common.callbacks import (
@@ -764,7 +766,7 @@ def run_multi_thread_sb3(args):
 
     # === Configuration ===
     num_envs = 12
-    total_timesteps = 100_000_000  # 100M steps for overnight training
+    total_timesteps = 16_000_000  # 100M steps for overnight training
     save_freq = 50_000  # Save checkpoint every 50k steps
     log_interval = 1  # Log every iteration
 
@@ -823,6 +825,28 @@ def run_multi_thread_sb3(args):
             clip_reward=10.0,  # Clip to reasonable range
             gamma=0.99,  # Discount for reward normalization
         )
+
+    def semi_linear_schedule(initial_value: float) -> Callable[[float], float]:
+        """
+        Linear learning rate schedule.
+
+        :param initial_value: Initial learning rate.
+        :return: schedule that computes
+        current learning rate depending on remaining progress
+        """
+
+        def func(progress_remaining: float) -> float:
+            """
+            Progress will decrease from 1 (beginning) to 0.
+
+            :param progress_remaining:
+            :return: current learning rate
+            """
+            if progress_remaining > 7.0 / 8.0:
+                return initial_value
+            return 8.0 / 7.0 * progress_remaining * initial_value
+
+        return func
 
     # === Custom Callback for Best Model & Metrics ===
     class TrainingMetricsCallback(BaseCallback):
@@ -964,14 +988,14 @@ def run_multi_thread_sb3(args):
             "MultiInputPolicy",
             envs,
             verbose=1,
-            learning_rate=3e-4,
+            learning_rate=semi_linear_schedule(3e-4),
             n_steps=2048,  # Steps per env before update
             batch_size=64,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.01,  # Add entropy for exploration
+            ent_coef=0.008,  # Add entropy for exploration
             vf_coef=0.5,
             max_grad_norm=0.5,
             tensorboard_log=str(log_dir),
