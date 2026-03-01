@@ -142,6 +142,7 @@ report/json/report_configuration.hpp
 report/report_helper.hpp
 report/report_timer.hpp
 report/reports.hpp
+rl/rl_interface.hpp
 sc_enums.hpp
 sim/benefit.hpp
 sim/cooldown.hpp
@@ -334,6 +335,7 @@ report/report_html_player.cpp
 report/report_html_sim.cpp
 report/report_text.cpp
 report/reports.cpp
+rl/rl_interface.cpp
 sim/cooldown.cpp
 sim/cooldown_waste_data.cpp
 sim/event.cpp

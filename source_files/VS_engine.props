@@ -148,6 +148,7 @@ To change the list of source files run synchronize.py
 		<ClInclude Include="..\engine\report\report_helper.hpp" />
 		<ClInclude Include="..\engine\report\report_timer.hpp" />
 		<ClInclude Include="..\engine\report\reports.hpp" />
+		<ClInclude Include="..\engine\rl\rl_interface.hpp" />
 		<ClInclude Include="..\engine\sc_enums.hpp" />
 		<ClInclude Include="..\engine\sim\benefit.hpp" />
 		<ClInclude Include="..\engine\sim\cooldown.hpp" />
@@ -340,6 +341,7 @@ To change the list of source files run synchronize.py
 		<ClCompile Include="..\engine\report\report_html_sim.cpp" />
 		<ClCompile Include="..\engine\report\report_text.cpp" />
 		<ClCompile Include="..\engine\report\reports.cpp" />
+		<ClCompile Include="..\engine\rl\rl_interface.cpp" />
 		<ClCompile Include="..\engine\sim\cooldown.cpp" />
 		<ClCompile Include="..\engine\sim\cooldown_waste_data.cpp" />
 		<ClCompile Include="..\engine\sim\event.cpp" />

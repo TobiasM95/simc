@@ -1,0 +1,139 @@
+# RL bridge settings
+rl_enable=1
+rl_stdio=1
+rl_trace=0
+
+# Optional observation features
+rl_observe_buffs=tigers_fury,clearcasting
+rl_observe_dots=rip,rake
+
+# Typical RL run shape
+iterations=1
+threads=1
+max_time=300
+
+druid="Fearl Base"
+source=default
+spec=feral
+level=90
+race=night_elf
+timeofday=night
+role=attack
+position=back
+professions=leatherworking=73/
+talents=CcGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjZwMzMzMmttxyMbzYGzMDAAAALBzihxMjaGziZmZGjZYAAAAAAMwAAAAoZ2mtZmZmlZWa2mZZBMzAsYGMAAmZwMLYA
+shadowlands.soleahs_secret_technique_type_override=haste
+
+# Default consumables
+potion=lights_potential_2
+flask=magisters_2
+food=harandar_celebration
+augmentation=void_touched
+temporary_enchant=main_hand:thalassian_phoenix_oil_2
+
+initial_resource=energy=30
+
+# Executed before combat begins. Accepts non-harmful actions only.
+actions.precombat=snapshot_stats
+actions.precombat+=/variable,name=regrowth,op=reset
+actions.precombat+=/variable,name=algethar_puzzle_box_precombat_cast,value=3,if=equipped.algethar_puzzle_box
+actions.precombat+=/use_item,name=algethar_puzzle_box
+actions.precombat+=/cat_form,if=buff.cat_form.down
+actions.precombat+=/prowl
+
+# Executed every time the actor is available.
+actions=prowl,if=buff.bs_inc.down&!buff.prowl.up&!buff.shadowmeld.up
+actions+=/cat_form,if=!buff.cat_form.up&!talent.fluid_form
+actions+=/invoke_external_buff,name=power_infusion,if=buff.bs_inc.up|!talent.berserk_heart_of_the_lion
+actions+=/auto_attack,if=!buff.prowl.up&!buff.shadowmeld.up
+actions+=/tigers_fury
+actions+=/rake,if=buff.prowl.up|buff.shadowmeld.up
+actions+=/berserk
+actions+=/potion
+actions+=/ferocious_bite,if=buff.apex_predators_craving.up
+actions+=/call_action_list,name=cooldown
+actions+=/call_action_list,name=finisher,if=combo_points>=4&spell_targets=1
+actions+=/call_action_list,name=aoe_finisher,if=combo_points>=4&spell_targets>=2
+actions+=/call_action_list,name=builder,if=spell_targets=1&combo_points<4
+actions+=/regrowth,if=buff.predatory_swiftness.up&variable.regrowth
+actions+=/chomp,if=buff.chomp_enabler.up&!buff.bs_inc.up
+
+actions.aoe_finisher=pool_resource,for_next=1
+actions.aoe_finisher+=/primal_wrath,target_if=min:dot.primal_wrath.ticking,if=spell_targets.primal_wrath>1&(dot.primal_wrath.remains<6.5&!buff.bs_inc.up|dot.primal_wrath.refreshable)
+actions.aoe_finisher+=/pool_resource,for_next=1
+actions.aoe_finisher+=/ferocious_bite,max_energy=1,if=talent.rampant_ferocity|buff.ravage.up&spell_targets<8|dot.bloodseeker_vines.ticking&spell_targets<5
+actions.aoe_finisher+=/primal_wrath
+
+actions.builder=prowl,if=!buff.shadowmeld.up&(action.rake.pmultiplier<1.6|dot.rake.refreshable)
+actions.builder+=/shadowmeld,if=!buff.prowl.up&(action.rake.pmultiplier<1.6|dot.rake.refreshable)
+actions.builder+=/rake,if=(buff.tigers_fury.up|remains<cooldown.tigers_fury.remains)&(refreshable&persistent_multiplier>=pmultiplier|remains<2|persistent_multiplier>pmultiplier)
+actions.builder+=/moonfire_cat,if=(buff.tigers_fury.up|remains<cooldown.tigers_fury.remains)&(refreshable&persistent_multiplier>=pmultiplier|remains<2|persistent_multiplier>pmultiplier)
+actions.builder+=/shred
+
+actions.cd_variable=variable,name=convokeCountRemaining,value=floor(((fight_remains-variable.convoke_cd)%cooldown.convoke_the_spirits.duration)+(fight_remains>cooldown.convoke_the_spirits.remains))
+actions.cd_variable+=/variable,name=zerkCountRemaining,value=floor(((fight_remains-variable.bs_inc_cd)%cooldown.bs_inc.duration)+(fight_remains>cooldown.bs_inc.remains))
+actions.cd_variable+=/variable,name=potCountRemaining,value=floor(((fight_remains-variable.pot_cd)%cooldown.potion.duration)+(fight_remains>cooldown.potion.remains))
+actions.cd_variable+=/variable,name=slot1CountRemaining,value=floor(((fight_remains-trinket.1.cooldown.remains-10)%trinket.1.cooldown.duration)+(fight_remains>trinket.1.cooldown.remains))
+actions.cd_variable+=/variable,name=slot2CountRemaining,value=floor(((fight_remains-trinket.2.cooldown.remains-10)%trinket.2.cooldown.duration)+(fight_remains>trinket.2.cooldown.remains))
+actions.cd_variable+=/variable,name=firstHoldBerserkCondition,value=variable.zerkCountRemaining=1&(variable.convokeCountRemaining=1&cooldown.convoke_the_spirits.remains>10|variable.potCountRemaining=1&cooldown.potion.remains)
+actions.cd_variable+=/variable,name=secondHoldBerserkCondition,value=cooldown.convoke_the_spirits.remains>20&variable.convokeCountRemaining=variable.zerkCountRemaining&variable.zerkCountRemaining=floor(((fight_remains-variable.convoke_cd)%cooldown.bs_inc.duration)+(fight_remains>cooldown.convoke_the_spirits.remains))
+actions.cd_variable+=/variable,name=holdBerserk,value=variable.firstHoldBerserkCondition|variable.secondHoldBerserkCondition
+actions.cd_variable+=/variable,name=holdConvoke,value=variable.convokeCountRemaining=1&variable.zerkCountRemaining=1&!buff.bs_inc.up
+actions.cd_variable+=/variable,name=holdPot,value=variable.potCountRemaining=floor(((fight_remains-variable.bs_inc_cd)%cooldown.potion.duration)+(fight_remains>cooldown.bs_inc.remains))
+actions.cd_variable+=/variable,name=bs_inc_cd,value=cooldown.bs_inc.remains+10
+actions.cd_variable+=/variable,name=convoke_cd,value=cooldown.convoke_the_spirits.remains+10
+actions.cd_variable+=/variable,name=pot_cd,value=cooldown.potion.remains+25
+actions.cd_variable+=/variable,name=highestCDremaining,op=setif,condition=talent.convoke_the_spirits,value=cooldown.convoke_the_spirits.remains<?cooldown.bs_inc.remains<?cooldown.potion.remains,value_else=cooldown.bs_inc.remains<?cooldown.potion.remains
+actions.cd_variable+=/variable,name=lowestCDremaining,op=setif,condition=talent.convoke_the_spirits,value=cooldown.convoke_the_spirits.remains>?cooldown.bs_inc.remains>?cooldown.potion.remains,value_else=cooldown.bs_inc.remains>?cooldown.potion.remains
+actions.cd_variable+=/variable,name=secondLowestCDremaining,op=setif,condition=cooldown.convoke_the_spirits.remains>cooldown.bs_inc.remains,value=cooldown.convoke_the_spirits.remains>?cooldown.potion.remains,value_else=cooldown.bs_inc.remains>?cooldown.potion.remains
+
+actions.cooldown=call_action_list,name=cd_variable,if=!cooldown.bs_inc.remains|!cooldown.convoke_the_spirits.remains|!cooldown.potion.remains|!trinket.1.cooldown.remains|!trinket.2.cooldown.remains
+actions.cooldown+=/use_item,slot=trinket1,if=trinket.1.has_use_damage&(trinket.2.cooldown.remains>20|!trinket.2.has_use_buff|cooldown.tigers_fury.remains<25&cooldown.tigers_fury.remains>20)
+actions.cooldown+=/use_item,slot=trinket2,if=trinket.2.has_use_damage&(trinket.1.cooldown.remains>20|!trinket.1.has_use_buff|cooldown.tigers_fury.remains<25&cooldown.tigers_fury.remains>20)
+actions.cooldown+=/berserking,if=buff.bs_inc.up
+actions.cooldown+=/potion,if=buff.bs_inc.up|fight_remains<32|buff.tigers_fury.up&!variable.holdPot
+actions.cooldown+=/use_items
+actions.cooldown+=/use_item,slot=trinket1,use_off_gcd=1,if=(time>10|buff.bs_inc.up)&trinket.1.has_use_buff&(cooldown.tigers_fury.remains>=25|trinket.1.is.algethar_puzzle_box&cooldown.tigers_fury.remains<2)&(buff.potion.up|variable.slot1CountRemaining!=variable.potCountRemaining)&((cooldown.bs_inc.remains<5|buff.bs_inc.remains>=14)&!variable.holdBerserk|cooldown.convoke_the_spirits.remains<10&!variable.holdConvoke&talent.convoke_the_spirits|variable.lowestCDremaining>trinket.1.cooldown.duration|variable.zerkCountRemaining=1&(!talent.convoke_the_spirits|variable.convokeCountRemaining=1)&variable.potCountRemaining=1&(variable.highestCDremaining+3)>trinket.1.cooldown.duration|variable.zerkCountRemaining=variable.convokeCountRemaining&talent.convoke_the_spirits&variable.zerkCountRemaining!=variable.potCountRemaining&(cooldown.bs_inc.remains<?cooldown.convoke_the_spirits.remains)>trinket.1.cooldown.duration|variable.slot1CountRemaining=variable.potCountRemaining-1&buff.potion.up|trinket.2.has_use_buff&(variable.secondLowestCDremaining>trinket.1.cooldown.duration&variable.lowestCDremaining>trinket.2.cooldown.remains|variable.zerkCountRemaining=1&(!talent.convoke_the_spirits|variable.convokeCountRemaining=1)&variable.potCountRemaining=1&variable.highestCDremaining>trinket.2.cooldown.remains|variable.zerkCountRemaining=variable.convokeCountRemaining&talent.convoke_the_spirits&variable.zerkCountRemaining!=variable.potCountRemaining&(cooldown.convoke_the_spirits.remains<?cooldown.bs_inc.remains)>trinket.2.cooldown.remains|variable.convokeCountRemaining=0&variable.zerkCountRemaining=0&variable.potCountRemaining=0))
+actions.cooldown+=/use_item,slot=trinket2,use_off_gcd=1,if=(time>10|buff.bs_inc.up)&trinket.2.has_use_buff&(!trinket.1.has_use_buff|trinket.1.cooldown.remains>20)&(cooldown.tigers_fury.remains>=25|trinket.2.is.algethar_puzzle_box&cooldown.tigers_fury.remains<2)&(buff.potion.up|variable.slot2CountRemaining!=variable.potCountRemaining)&((cooldown.bs_inc.remains<5|buff.bs_inc.remains>=14)&!variable.holdBerserk|cooldown.convoke_the_spirits.remains<10&!variable.holdConvoke&talent.convoke_the_spirits|variable.lowestCDremaining>trinket.2.cooldown.duration|variable.zerkCountRemaining=1&(!talent.convoke_the_spirits|variable.convokeCountRemaining=1)&variable.potCountRemaining=1&(variable.highestCDremaining+3)>trinket.2.cooldown.duration|variable.zerkCountRemaining=variable.convokeCountRemaining&talent.convoke_the_spirits&variable.zerkCountRemaining!=variable.potCountRemaining&(cooldown.bs_inc.remains<?cooldown.convoke_the_spirits.remains)>trinket.2.cooldown.duration|variable.slot1CountRemaining=variable.potCountRemaining-1&buff.potion.up|trinket.1.has_use_buff&(variable.secondLowestCDremaining>trinket.2.cooldown.duration&variable.lowestCDremaining>trinket.1.cooldown.remains|variable.zerkCountRemaining=1&(!talent.convoke_the_spirits|variable.convokeCountRemaining=1)&variable.potCountRemaining=1&variable.highestCDremaining>trinket.1.cooldown.remains|variable.zerkCountRemaining=variable.convokeCountRemaining&talent.convoke_the_spirits&variable.zerkCountRemaining!=variable.potCountRemaining&(cooldown.convoke_the_spirits.remains<?cooldown.bs_inc.remains)>trinket.1.cooldown.remains|variable.convokeCountRemaining=0&variable.zerkCountRemaining=0&variable.potCountRemaining=0))
+actions.cooldown+=/use_item,slot=trinket1,if=fight_remains<=(21<?trinket.1.proc.any_dps.duration)
+actions.cooldown+=/use_item,slot=trinket2,if=fight_remains<=(21<?trinket.2.proc.any_dps.duration)
+actions.cooldown+=/incarnation,if=buff.tigers_fury.up&!variable.holdBerserk
+actions.cooldown+=/berserk,if=buff.tigers_fury.up&!variable.holdBerserk
+actions.cooldown+=/feral_frenzy,if=buff.tigers_fury.up&combo_points<=2+(2*buff.bs_inc.up)
+actions.cooldown+=/convoke_the_spirits,if=fight_remains<5|buff.bs_inc.up&buff.bs_inc.remains<5-talent.ashamanes_guidance|buff.tigers_fury.up&!variable.holdConvoke&(prev_gcd.1.rip|prev_gcd.1.ferocious_bite)
+
+actions.finisher=rip,if=refreshable&(buff.tigers_fury.up|dot.rip.remains<cooldown.tigers_fury.remains)
+actions.finisher+=/pool_resource,for_next=1
+actions.finisher+=/ferocious_bite,if=!talent.saber_jaws|!buff.ravage.up
+actions.finisher+=/pool_resource,for_next=1
+actions.finisher+=/ferocious_bite,max_energy=1
+
+head=branches_of_the_luminous_bloom,id=250024,bonus_id=1808/13575/13575/13575/13575/13575/13575/13575,ilevel=289,gem_id=240983,enchant_id=8017
+neck=amulet_of_the_abyssal_hymn,id=250247,bonus_id=12806/13577/13668,ilevel=289,gem_id=240914/240914
+shoulders=fallen_grunts_mantle,id=251092,bonus_id=4795,ilevel=289,enchant_id=8001
+back=leafdrape_of_the_luminous_bloom,id=250019,ilevel=289
+chest=trunk_of_the_luminous_bloom,id=250027,bonus_id=13575/13575/13575/13575/13575/13575/13575,ilevel=289,enchant_id=7987
+wrists=silvermoon_agents_deflectors,id=244576,bonus_id=1808/8790/8960/12214/12214/12214/13454,ilevel=285,gem_id=240914,crafted_stats=32/49
+hands=arbortenders_of_the_luminous_bloom,id=250025,bonus_id=13574/13574/13574/13574/13574/13574/13574,ilevel=289
+waist=scornscarred_shulkas_belt,id=249374,bonus_id=1808/4795,ilevel=289,gem_id=240914
+legs=phloemwraps_of_the_luminous_bloom,id=250023,bonus_id=13575/13575/13575/13575/13575/13575/13575,ilevel=289,enchant_id=8159
+feet=canopy_walkers_footwraps,id=249382,ilevel=289,enchant_id=7993
+finger1=eye_of_midnight,id=249920,bonus_id=40/12806/13335/13534,ilevel=289,gem_id=240914/240914,enchant_id=7969
+finger2=masterwork_sindorei_band,id=240949,bonus_id=8960/12066/12214/12214/12214/12214/13453/9627,ilevel=285,gem_id=240914,enchant_id=7969,crafted_stats=32/49
+trinket1=algethar_puzzle_box,id=193701,ilevel=289
+trinket2=gaze_of_the_alnseer,id=249343,ilevel=289
+main_hand=roostwardens_bough,id=251077,ilevel=289,enchant_id=8039
+
+# Gear Summary
+# gear_ilvl=288.47
+# gear_agility=1246
+# gear_stamina=17604
+# gear_crit_rating=530
+# gear_haste_rating=841
+# gear_mastery_rating=1053
+# gear_versatility_rating=121
+# gear_leech_rating=28
+# gear_avoidance_rating=200
+# gear_armor=875
+# set_bonus=midnight_season_1_2pc=1
+# set_bonus=midnight_season_1_4pc=1

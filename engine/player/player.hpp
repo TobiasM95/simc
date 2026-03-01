@@ -425,6 +425,10 @@ struct player_t : public actor_t
 
   // Damage
   double iteration_dmg, priority_iteration_dmg, iteration_dmg_taken; // temporary accumulators
+  double rl_last_priority_iteration_dmg;
+  std::vector<action_t*> rl_action_list;
+  std::vector<std::string> rl_action_labels;
+  std::vector<action_t*> rl_wait_actions;
   double dpr;
   struct incoming_damage_entry_t {
     timespan_t time;

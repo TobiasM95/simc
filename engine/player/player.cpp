@@ -50,6 +50,7 @@
 #include "player/unique_gear.hpp"
 #include "player/unique_gear_midnight.hpp"
 #include "report/decorators.hpp"
+#include "rl/rl_interface.hpp"
 #include "sim/benefit.hpp"
 #include "sim/cooldown.hpp"
 #include "sim/cooldown_waste_data.hpp"
@@ -1095,6 +1096,10 @@ player_t::player_t( sim_t* s, player_e t, util::string_view n, race_e r )
     // Damage
     iteration_dmg( 0 ),
     priority_iteration_dmg( 0 ),
+    rl_last_priority_iteration_dmg( 0 ),
+    rl_action_list(),
+    rl_action_labels(),
+    rl_wait_actions(),
     iteration_dmg_taken( 0 ),
     dpr( 0 ),
     // Heal
@@ -6502,6 +6507,7 @@ void player_t::datacollection_begin()
   iteration_executed_foreground_actions = 0;
   iteration_dmg                         = 0;
   priority_iteration_dmg                = 0;
+  rl_last_priority_iteration_dmg        = 0;
   iteration_heal                        = 0;
   iteration_absorb                      = 0.0;
   iteration_absorb_taken                = 0.0;
@@ -14265,6 +14271,33 @@ void player_t::do_update_movement( double yards )
   }
 }
 
+struct rl_wait_action_t : public action_t
+{
+  timespan_t wait_duration;
+
+  rl_wait_action_t( player_t* p, double seconds )
+    : action_t( ACTION_OTHER, "rl_wait_" + std::to_string( seconds ), p, spell_data_t::nil() ),
+      wait_duration( timespan_t::from_seconds( seconds ) )
+  {
+    trigger_gcd           = timespan_t::zero();
+    harmful               = false;
+    interrupt_auto_attack = false;
+    quiet                 = true;
+    target                = p;
+  }
+
+  void execute() override
+  {
+    player->iteration_waiting_time += wait_duration;
+    total_executions++;
+  }
+
+  timespan_t execute_time() const override
+  {
+    return wait_duration;
+  }
+};
+
 // Note, root call needs to set player_t::visited_apls_ to 0
 action_t* player_t::select_action( const action_priority_list_t& list,
                                    execute_type                  et,
@@ -14272,6 +14305,96 @@ action_t* player_t::select_action( const action_priority_list_t& list,
 {
   // Mark this action list as visited with the APL internal id
   visited_apls_ |= list.internal_id_mask;
+
+  if ( sim && sim->rl_enable && visited_apls_ == list.internal_id_mask && et == execute_type::FOREGROUND &&
+       !is_enemy() && !is_pet() )
+  {
+    if ( rl_action_list.empty() )
+    {
+      rl::build_action_list( *this, rl_action_list, rl_action_labels );
+
+      const std::size_t num_wait = rl::get_num_wait_pseudo_actions();
+      for ( std::size_t i = 0; i < num_wait; ++i )
+      {
+        rl_wait_actions.push_back( new rl_wait_action_t( this, rl::get_wait_pseudo_action_duration( i ) ) );
+      }
+
+      if ( sim->rl_stdio )
+      {
+        rl::set_policy( &rl::stdio_policy, nullptr );
+      }
+    }
+
+    std::vector<uint8_t> rl_mask;
+    std::vector<double> rl_cd_remains_s;
+    std::vector<double> rl_cd_remains_norm;
+    std::vector<double> rl_cd_charges_frac;
+
+    rl::update_action_features( *this, et, rl_action_list, rl_mask, rl_cd_remains_s, rl_cd_remains_norm,
+                                rl_cd_charges_frac );
+
+    bool any_legal = false;
+    for ( uint8_t legal : rl_mask )
+    {
+      if ( legal )
+      {
+        any_legal = true;
+        break;
+      }
+    }
+    if ( !any_legal )
+      return nullptr;
+
+    rl::step_input_t input;
+    input.player      = this;
+    input.observation = rl::build_observation( *this );
+    input.reward      = priority_iteration_dmg - rl_last_priority_iteration_dmg;
+    rl_last_priority_iteration_dmg = priority_iteration_dmg;
+    input.action_space.actions = util::span<action_t* const>( rl_action_list.data(), rl_action_list.size() );
+    input.action_space.action_labels = util::span<const std::string>( rl_action_labels.data(), rl_action_labels.size() );
+    input.action_space.action_mask = util::span<const uint8_t>( rl_mask.data(), rl_mask.size() );
+    input.action_space.cooldown_remains_s = util::span<const double>( rl_cd_remains_s.data(), rl_cd_remains_s.size() );
+    input.action_space.cooldown_remains_norm =
+        util::span<const double>( rl_cd_remains_norm.data(), rl_cd_remains_norm.size() );
+    input.action_space.cooldown_charges_frac =
+        util::span<const double>( rl_cd_charges_frac.data(), rl_cd_charges_frac.size() );
+
+    auto policy              = rl::get_policy();
+    const std::size_t chosen = policy ? policy( input, rl::get_policy_user_data() ) : rl_action_list.size();
+    if ( sim->rl_trace )
+    {
+      rl::trace_decision( input, chosen );
+    }
+
+    auto pick_action = [ this ]( std::size_t idx ) -> action_t* {
+      if ( idx >= rl_action_list.size() )
+        return nullptr;
+      if ( rl_action_list[ idx ] != nullptr )
+        return rl_action_list[ idx ];
+      if ( rl::is_pass_pseudo_action( idx, rl_action_list.size() ) )
+        return nullptr;
+
+      const std::size_t num_pseudo   = rl::get_total_pseudo_actions();
+      const std::size_t real_actions = rl_action_list.size() - num_pseudo;
+      const std::size_t wait_idx     = idx - real_actions;
+      if ( wait_idx < rl_wait_actions.size() )
+        return rl_wait_actions[ wait_idx ];
+      return nullptr;
+    };
+
+    if ( chosen < rl_action_list.size() && rl_mask[ chosen ] )
+    {
+      return pick_action( chosen );
+    }
+
+    for ( std::size_t i = 0; i < rl_action_list.size(); ++i )
+    {
+      if ( rl_mask[ i ] )
+        return pick_action( i );
+    }
+
+    return nullptr;
+  }
 
   // Cached copy for recursion, we'll need it if we come back from a
   // call_action_list tree, with nothing to show for it.

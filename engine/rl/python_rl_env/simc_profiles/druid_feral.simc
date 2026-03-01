@@ -1,0 +1,64 @@
+# RL bridge settings
+rl_enable=1
+rl_stdio=1
+rl_trace=0
+
+# Optional observation features
+rl_observe_buffs=tigers_fury,clearcasting
+rl_observe_dots=rip,rake
+
+# Typical RL run shape
+iterations=1
+threads=1
+max_time=300
+
+druid="Fearl Base"
+source=default
+spec=feral
+level=90
+race=night_elf
+timeofday=night
+role=attack
+position=back
+professions=leatherworking=73/
+talents=CcGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjZwMzMzMmttxyMbzYGzMDAAAALBzihxMjaGziZmZGjZYAAAAAAMwAAAAoZ2mtZmZmlZWa2mZZBMzAsYGMAAmZwMLYA
+shadowlands.soleahs_secret_technique_type_override=haste
+
+# Default consumables
+potion=lights_potential_2
+flask=magisters_2
+food=harandar_celebration
+augmentation=void_touched
+temporary_enchant=main_hand:thalassian_phoenix_oil_2
+
+initial_resource=energy=30
+
+head=branches_of_the_luminous_bloom,id=250024,bonus_id=1808/13575/13575/13575/13575/13575/13575/13575,ilevel=289,gem_id=240983,enchant_id=8017
+neck=amulet_of_the_abyssal_hymn,id=250247,bonus_id=12806/13577/13668,ilevel=289,gem_id=240914/240914
+shoulders=fallen_grunts_mantle,id=251092,bonus_id=4795,ilevel=289,enchant_id=8001
+back=leafdrape_of_the_luminous_bloom,id=250019,ilevel=289
+chest=trunk_of_the_luminous_bloom,id=250027,bonus_id=13575/13575/13575/13575/13575/13575/13575,ilevel=289,enchant_id=7987
+wrists=silvermoon_agents_deflectors,id=244576,bonus_id=1808/8790/8960/12214/12214/12214/13454,ilevel=285,gem_id=240914,crafted_stats=32/49
+hands=arbortenders_of_the_luminous_bloom,id=250025,bonus_id=13574/13574/13574/13574/13574/13574/13574,ilevel=289
+waist=scornscarred_shulkas_belt,id=249374,bonus_id=1808/4795,ilevel=289,gem_id=240914
+legs=phloemwraps_of_the_luminous_bloom,id=250023,bonus_id=13575/13575/13575/13575/13575/13575/13575,ilevel=289,enchant_id=8159
+feet=canopy_walkers_footwraps,id=249382,ilevel=289,enchant_id=7993
+finger1=eye_of_midnight,id=249920,bonus_id=40/12806/13335/13534,ilevel=289,gem_id=240914/240914,enchant_id=7969
+finger2=masterwork_sindorei_band,id=240949,bonus_id=8960/12066/12214/12214/12214/12214/13453/9627,ilevel=285,gem_id=240914,enchant_id=7969,crafted_stats=32/49
+trinket1=algethar_puzzle_box,id=193701,ilevel=289
+trinket2=gaze_of_the_alnseer,id=249343,ilevel=289
+main_hand=roostwardens_bough,id=251077,ilevel=289,enchant_id=8039
+
+# Gear Summary
+# gear_ilvl=288.47
+# gear_agility=1246
+# gear_stamina=17604
+# gear_crit_rating=530
+# gear_haste_rating=841
+# gear_mastery_rating=1053
+# gear_versatility_rating=121
+# gear_leech_rating=28
+# gear_avoidance_rating=200
+# gear_armor=875
+# set_bonus=midnight_season_1_2pc=1
+# set_bonus=midnight_season_1_4pc=1

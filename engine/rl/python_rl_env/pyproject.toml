@@ -1,0 +1,13 @@
+[project]
+name = "python-rl-env"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "gymnasium>=1.2.3",
+    "numpy>=2.4.0",
+    "rich>=14.2.0",
+    "sb3-contrib>=2.7.1",
+    "tensorboard>=2.18.0",
+    "tqdm>=4.67.0",
+]

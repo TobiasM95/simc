@@ -573,6 +573,12 @@ struct sim_t : private sc_thread_t
   bool count_overheal_as_heal;
   double scaling_normalized;
   bool merge_enemy_priority_dmg;
+  bool rl_enable;
+  bool rl_trace;
+  std::string rl_trace_file;
+  bool rl_stdio;
+  opts::list_t rl_observe_buffs;
+  opts::list_t rl_observe_dots;
 
   // Multi-Threading
   mutex_t merge_mutex;

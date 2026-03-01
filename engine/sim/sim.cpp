@@ -32,6 +32,7 @@
 #include "sim/scale_factor_control.hpp"
 #include "sim/sim_control.hpp"
 #include "sim/work_queue.hpp"
+#include "rl/rl_interface.hpp"
 #include "util/string_view.hpp"
 #include "util/xml.hpp"
 
@@ -1547,6 +1548,10 @@ sim_t::sim_t()
     count_overheal_as_heal( false ),
     scaling_normalized( 1.0 ),
     merge_enemy_priority_dmg( false ),
+    rl_enable( false ),
+    rl_trace( false ),
+    rl_trace_file( "rl_trace.jsonl" ),
+    rl_stdio( false ),
     // Multi-Threading
     threads( 0 ),
     thread_index( 0 ),
@@ -1991,6 +1996,20 @@ void sim_t::combat_end()
 
   if ( iterations == 1 || current_iteration >= 1 )
     datacollection_end();
+
+  if ( rl_stdio && rl_enable )
+  {
+    double total_damage = 0.0;
+    for ( auto* p : player_no_pet_list )
+    {
+      if ( p && !p->is_enemy() )
+      {
+        total_damage = p->iteration_dmg;
+        break;
+      }
+    }
+    rl::write_episode_end( total_damage, current_time().total_seconds() );
+  }
 
   //assert( active_enemies == 0 );
   //assert( active_allies == 0 );
@@ -3789,6 +3808,12 @@ void sim_t::create_options()
   add_option( opt_bool( "override.allow_flasks", allow_flasks ) );
   add_option( opt_bool( "override.allow_augmentations", allow_augmentations ) );
   add_option( opt_bool( "override.bloodlust", overrides.bloodlust ) );
+  add_option( opt_bool( "rl_enable", rl_enable ) );
+  add_option( opt_bool( "rl_trace", rl_trace ) );
+  add_option( opt_string( "rl_trace_file", rl_trace_file ) );
+  add_option( opt_bool( "rl_stdio", rl_stdio ) );
+  add_option( opt_list( "rl_observe_buffs", rl_observe_buffs ) );
+  add_option( opt_list( "rl_observe_dots", rl_observe_dots ) );
   // Regen
   add_option( opt_timespan( "regen_periodicity", regen_periodicity ) );
   // RNG
@@ -4298,6 +4323,11 @@ void sim_t::setup( sim_control_t* c )
     if ( ! debug_each )
       iterations = 1;
 
+    threads = 1;
+  }
+
+  if ( rl_stdio && rl_enable )
+  {
     threads = 1;
   }
 

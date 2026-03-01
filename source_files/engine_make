@@ -146,6 +146,7 @@ SRC += \
     report$(PATHSEP)report_html_sim.cpp \
     report$(PATHSEP)report_text.cpp \
     report$(PATHSEP)reports.cpp \
+    rl$(PATHSEP)rl_interface.cpp \
     sim$(PATHSEP)cooldown.cpp \
     sim$(PATHSEP)cooldown_waste_data.cpp \
     sim$(PATHSEP)event.cpp \
