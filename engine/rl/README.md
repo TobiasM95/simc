@@ -140,6 +140,34 @@ Use this as the fastest entry point.
 | Evaluate trained model | `uv run python rl_bridge.py --mode eval --simc ../../../out/build/x64-Release/simc.exe --profile ./simc_profiles/druid_feral.simc --model-dir ./training_runs/simc_ppo_YYYYMMDD_HHMMSS --iterations 2000` |
 | Single-env SB3 test | `uv run python rl_bridge.py --mode single --simc ../../../out/build/x64-Release/simc.exe --profile ./simc_profiles/druid_feral.simc` |
 
+### V2 Training/Eval Script (Python-side improvements)
+
+`python_rl_env/rl_train_v2.py` adds:
+- per-episode seed diversity across workers
+- cooldown normalized features (`cd_rem_n`) in observations
+- no-op masking policy (`wait_*`/`pass` masked when real actions are legal)
+- held-out eval based checkpoint selection (`best_eval_model.zip`)
+
+Start training:
+
+```bash
+uv run python rl_train_v2.py \
+  --mode train \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc
+```
+
+Run evaluation:
+
+```bash
+uv run python rl_train_v2.py \
+  --mode eval \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc \
+  --model-dir ./training_runs/simc_ppo_v2_YYYYMMDD_HHMMSS \
+  --iterations 2000
+```
+
 ## 2) Prepare a profile
 
 You can set RL options directly in the profile file:
