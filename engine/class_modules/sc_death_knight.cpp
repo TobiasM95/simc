@@ -8192,7 +8192,7 @@ struct reapers_mark_t final : public death_knight_spell_t
     {
       add_child( p->background_actions.soul_rupture );
     }
-    if ( p->talent.deathbringer.exterminate.ok() )
+    if ( p->talent.deathbringer.exterminate.ok() || p->talent.deathbringer.echoing_fury.ok() )
     {
       add_child( p->background_actions.exterminate );
     }
@@ -13805,11 +13805,11 @@ void death_knight_t::create_actions()
   {
     background_actions.soul_rupture = get_action<soul_rupture_t>( "reapers_mark_soul_rupture", this );
   }
-  if ( talent.deathbringer.exterminate.ok() )
+  if ( talent.deathbringer.exterminate.ok() || talent.deathbringer.echoing_fury.ok() )
   {
     background_actions.exterminate = get_action<exterminate_t>( "exterminate", this );
   }
-  if ( talent.deathbringer.exterminate.ok() )
+  if ( talent.deathbringer.exterminate.ok() || talent.deathbringer.echoing_fury.ok() )
   {
     background_actions.exterminate_aoe = get_action<exterminate_aoe_t>( "exterminate_second_hit", this );
   }
@@ -15074,9 +15074,12 @@ void death_knight_t::spell_lookups()
   spell.dark_talons_shadowfrost_buff = conditional_spell_lookup( talent.deathbringer.dark_talons.ok(), 443586 );
   spell.dark_talons_icy_talons_buff  = conditional_spell_lookup( talent.deathbringer.dark_talons.ok(), 443595 );
   spell.soul_rupture_damage          = conditional_spell_lookup( talent.deathbringer.soul_rupture.ok(), 439594 );
-  spell.exterminate_damage           = conditional_spell_lookup( talent.deathbringer.exterminate.ok(), 441424 );
-  spell.exterminate_aoe              = conditional_spell_lookup( talent.deathbringer.exterminate.ok(), 441426 );
-  spell.exterminate_buff             = conditional_spell_lookup( talent.deathbringer.exterminate.ok(), 441416 );
+  spell.exterminate_damage =
+      conditional_spell_lookup( talent.deathbringer.exterminate.ok() || talent.deathbringer.echoing_fury.ok(), 441424 );
+  spell.exterminate_aoe =
+      conditional_spell_lookup( talent.deathbringer.exterminate.ok() || talent.deathbringer.echoing_fury.ok(), 441426 );
+  spell.exterminate_buff =
+      conditional_spell_lookup( talent.deathbringer.exterminate.ok() || talent.deathbringer.echoing_fury.ok(), 441416 );
   spell.rune_carved_plates_physical_buff =
       conditional_spell_lookup( talent.deathbringer.rune_carved_plates.ok(), 440289 );
   spell.rune_carved_plates_magical_buff =
@@ -15522,8 +15525,8 @@ void death_knight_t::create_buffs()
             }
           } );
 
-  buffs.exterminate =
-      make_fallback( talent.deathbringer.exterminate.ok(), this, "exterminate", spell.exterminate_buff );
+  buffs.exterminate = make_fallback( talent.deathbringer.exterminate.ok() || talent.deathbringer.echoing_fury.ok(),
+                                     this, "exterminate", spell.exterminate_buff );
 
   buffs.swift_and_painful = make_fallback( talent.deathbringer.swift_and_painful.ok(), this, "swift_and_painful",
                                            spell.swift_and_painful_buff );
