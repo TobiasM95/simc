@@ -14345,9 +14345,71 @@ action_t* player_t::select_action( const action_priority_list_t& list,
     if ( !any_legal )
       return nullptr;
 
+    int teacher_idx            = -1;
+    std::string teacher_label;
+    if ( sim->rl_teacher_enable )
+    {
+      const bool prev_rl_enable         = sim->rl_enable;
+      const bool prev_rl_teacher_enable = sim->rl_teacher_enable;
+      const uint64_t prev_visited_apls  = visited_apls_;
+
+      sim->rl_enable         = false;
+      sim->rl_teacher_enable = false;
+      action_t* teacher_action = nullptr;
+      try
+      {
+        teacher_action = select_action( list, et, context );
+      }
+      catch ( ... )
+      {
+        sim->rl_enable         = prev_rl_enable;
+        sim->rl_teacher_enable = prev_rl_teacher_enable;
+        visited_apls_          = prev_visited_apls;
+        throw;
+      }
+      sim->rl_enable           = prev_rl_enable;
+      sim->rl_teacher_enable   = prev_rl_teacher_enable;
+      visited_apls_            = prev_visited_apls;
+
+      if ( teacher_action )
+      {
+        for ( std::size_t i = 0; i < rl_action_list.size(); ++i )
+        {
+          if ( rl_action_list[ i ] == teacher_action )
+          {
+            teacher_idx = static_cast<int>( i );
+            break;
+          }
+        }
+
+        if ( teacher_idx < 0 )
+        {
+          for ( std::size_t i = 0; i < rl_action_labels.size(); ++i )
+          {
+            if ( rl_action_labels[ i ] == teacher_action->name_str )
+            {
+              teacher_idx = static_cast<int>( i );
+              break;
+            }
+          }
+        }
+
+        if ( teacher_idx >= 0 && static_cast<std::size_t>( teacher_idx ) < rl_action_labels.size() )
+        {
+          teacher_label = rl_action_labels[ static_cast<std::size_t>( teacher_idx ) ];
+        }
+        else
+        {
+          teacher_idx = -1;
+        }
+      }
+    }
+
     rl::step_input_t input;
     input.player      = this;
     input.observation = rl::build_observation( *this );
+    input.teacher_idx = teacher_idx;
+    input.teacher_label = teacher_label;
     input.reward      = priority_iteration_dmg - rl_last_priority_iteration_dmg;
     rl_last_priority_iteration_dmg = priority_iteration_dmg;
     input.action_space.actions = util::span<action_t* const>( rl_action_list.data(), rl_action_list.size() );

@@ -1,0 +1,73 @@
+# Base Actor
+druid="Fearl Base"
+race=night_elf
+level=90
+spec=feral
+role=attack
+talents=CcGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjZwMzMzMmtlxyMbzYGzMDAAAALBzihxMjaGziZmZGjZYAAAAAAMwAAAAIAYWmZpZbmlNwMDwiZwAAYmBAD
+### Combo 1
+# Branches of the Luminous Bloom 289
+head=,id=250024,bonus_id=13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/1808,enchant_id=8017,gem_id=240983,ilevel=289
+# Amulet of the Abyssal Hymn 289
+neck=,id=250247,bonus_id=12806/13577/13668,gem_id=240914/240914,ilevel=289
+# Fallen Grunt's Mantle 289
+shoulder=,id=251092,bonus_id=4795,enchant_id=8001,ilevel=289
+# Adherent's Silken Shroud 285
+back=,id=239656,bonus_id=12214/12214/12214/12214/12214/12214/12214/8960/12384,ilevel=285,crafted_stats=32/49
+# Trunk of the Luminous Bloom 289
+chest=,id=250027,bonus_id=13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/13575,enchant_id=7987,ilevel=289
+# Silvermoon Agent's Deflectors 285
+wrist=,id=244576,bonus_id=12214/12214/12214/12214/12214/12214/12214/12214/1808/8790/8960/12384,gem_id=240914,ilevel=285,crafted_stats=32/49
+# Arbortenders of the Luminous Bloom 289
+hands=,id=250025,bonus_id=13574/13574/13574/13574/13574/13574/13574/13574/13574/13574/13574/13574,ilevel=289
+# Scorn-Scarred Shul'ka's Belt 289
+waist=,id=249374,bonus_id=4795/1808,gem_id=240914,ilevel=289
+# Phloemwraps of the Luminous Bloom 289
+legs=,id=250023,bonus_id=13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/13575/13575,enchant_id=8159,ilevel=289
+# Canopy Walker's Footwraps 289
+feet=,id=249382,enchant_id=7993,ilevel=289
+# Eye of Midnight 289
+finger1=,id=249920,bonus_id=40/13534/13335/12806,enchant_id=7967,gem_id=240914/240914,ilevel=289
+# Occlusion of Void 289
+finger2=,id=251217,bonus_id=12806/13577/13668,enchant_id=7967,gem_id=240898,ilevel=289
+# Algeth'ar Puzzle Box 289
+trinket1=,id=193701,ilevel=289
+# Gaze of the Alnseer 289
+trinket2=,id=249343,ilevel=289
+# Roostwarden's Bough 289
+main_hand=,id=251077,enchant_id=8039,ilevel=289
+off_hand=,
+talents=CcGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjZwMzMzMmtlxyMbzYGzMDAAAALBzihxMjaGziZmZGjZYAAAAAAMwAAAAIAYWmZpZbmlNwMDwiZwAAYmBAD
+
+name="Fearl Base"
+
+# Consumables
+
+# Expansion Options
+temporary_enchant=
+thewarwithin.dawn_dusk_thread_lining_uptime=0.6
+thewarwithin.astral_antenna_miss_chance=0.2
+thewarwithin.incorporeal_essence_gorger_ethereal=0
+thewarwithin.attuned_to_the_aether=1
+shadowlands.soleahs_secret_technique_type_override=crit
+# Custom APL
+
+# Simulation Options
+# iterations=5000
+desired_targets=1
+max_time=300
+calculate_scale_factors=0
+scale_only=strength,intellect,agility,crit,mastery,vers,haste,weapon_dps,weapon_offhand_dps
+override.bloodlust=1
+override.arcane_intellect=1
+override.power_word_fortitude=1
+override.battle_shout=1
+override.mystic_touch=1
+override.chaos_brand=1
+override.skyfury=1
+override.mark_of_the_wild=1
+override.hunters_mark=1
+override.bleeding=1
+report_details=1
+single_actor_batch=1
+optimize_expressions=1

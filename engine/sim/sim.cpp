@@ -1549,6 +1549,7 @@ sim_t::sim_t()
     scaling_normalized( 1.0 ),
     merge_enemy_priority_dmg( false ),
     rl_enable( false ),
+    rl_teacher_enable( false ),
     rl_trace( false ),
     rl_trace_file( "rl_trace.jsonl" ),
     rl_stdio( false ),
@@ -3809,6 +3810,7 @@ void sim_t::create_options()
   add_option( opt_bool( "override.allow_augmentations", allow_augmentations ) );
   add_option( opt_bool( "override.bloodlust", overrides.bloodlust ) );
   add_option( opt_bool( "rl_enable", rl_enable ) );
+  add_option( opt_bool( "rl_teacher_enable", rl_teacher_enable ) );
   add_option( opt_bool( "rl_trace", rl_trace ) );
   add_option( opt_string( "rl_trace_file", rl_trace_file ) );
   add_option( opt_bool( "rl_stdio", rl_stdio ) );

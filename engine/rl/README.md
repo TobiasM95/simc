@@ -27,7 +27,8 @@ At episode end, simc writes a JSON `done` message and exits.
 ## Files
 
 - `rl_interface.hpp/.cpp`: C++ RL bridge implementation.
-- `python_rl_env/rl_bridge.py`: Python Gymnasium environment + training helpers.
+- `python_rl_env/rl_train_v2.py`: maintained v2 trainer/eval entry point.
+- `python_rl_env/rl_bridge.py`: legacy helper script, not kept in sync with the current v2 path.
 
 ## Simc Options
 
@@ -35,6 +36,10 @@ These are simulator options (set in profile or CLI):
 
 - `rl_enable=1`
   - Enables RL action selection hook.
+  - Default: `0`.
+- `rl_teacher_enable=1`
+  - Exposes active APL teacher action (`teacher_idx`, `teacher_label`) in each step payload.
+  - Used by v2 teacher-reward curriculum mode.
   - Default: `0`.
 - `rl_stdio=1`
   - Uses stdio JSON protocol for external policy control.
@@ -77,6 +82,8 @@ Core fields:
 - `ttd`: target time-to-die (seconds)
 - `gcd_rem`: gcd remaining (seconds)
 - `reward`: dense reward for the previous decision
+- `teacher_idx`: teacher action index in the raw action space (`-1` when unavailable)
+- `teacher_label`: teacher action label (`""` when unavailable)
 - `spec_id`: current specialization id
 - `resource_pct`: resource percentages (`RESOURCE_MAX` length)
 - `n`: number of actions
@@ -147,8 +154,14 @@ Use this as the fastest entry point.
 - cooldown normalized features (`cd_rem_n`) in observations
 - no-op masking policy (`wait_*`/`pass` masked when real actions are legal)
 - held-out eval based checkpoint selection (`best_eval_model.zip`)
+- optional APL teacher-to-DPS reward curriculum with linear or hard transition
+- configurable DPS reward:
+  - `delta` = dense per-step damage deltas (default and recommended for regular non-teacher training)
+  - `sparse` = terminal-only `total_damage`
 
-Start training:
+`rl_train_v2.py` is the supported workflow. `rl_bridge.py` is legacy.
+
+Start regular non-teacher training (default dense reward):
 
 ```bash
 uv run python rl_train_v2.py \
@@ -156,6 +169,19 @@ uv run python rl_train_v2.py \
   --simc ../../../out/build/x64-Release/simc.exe \
   --profile ./simc_profiles/druid_feral.simc
 ```
+
+This default run is equivalent to:
+- `--teacher-mode off`
+- `--dps-reward-mode delta`
+
+Supported profile variants for v2:
+- `./simc_profiles/druid_feral.simc`: profile with an explicit custom APL.
+- `./simc_profiles/druid_feral_no_apl.simc`: profile without explicit `actions=` lines.
+- Non-teacher v2 should work with either profile style.
+- No-APL profiles depend on SimC having a generated/spec-implemented default APL for that spec.
+- In teacher mode, the teacher source is the active APL:
+  - profile APL when the profile defines one
+  - otherwise SimC's generated/spec-implemented default APL
 
 Run evaluation:
 
@@ -167,6 +193,176 @@ uv run python rl_train_v2.py \
   --model-dir ./training_runs/simc_ppo_v2_YYYYMMDD_HHMMSS \
   --iterations 2000
 ```
+
+Resume training:
+
+```bash
+uv run python rl_train_v2.py \
+  --mode train \
+  --resume ./training_runs/simc_ppo_v2_YYYYMMDD_HHMMSS \
+  --resume-checkpoint auto \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc \
+  --total-timesteps 3000000
+```
+
+Resume notes:
+- `--total-timesteps` is additional training steps for the resumed `learn()` call.
+- Internal timestep counters are preserved on resume (teacher schedule/adaptive windows continue from prior progress).
+- `--resume-checkpoint` controls which checkpoint is loaded:
+  - `auto` (default): `latest -> interrupted -> final -> best_eval`
+  - `best_eval`: load `best_eval_model.zip` directly (recommended for recovery after drift)
+  - `latest`, `interrupted`, `final`: force a specific checkpoint file
+- When resuming with `--resume-checkpoint best_eval`, v2 prefers `vec_normalize_best_eval.pkl` (if present), otherwise falls back to `vec_normalize.pkl`.
+
+Recover from degraded overnight training:
+
+```bash
+uv run python rl_train_v2.py \
+  --mode train \
+  --resume ./training_runs/simc_ppo_v2_YYYYMMDD_HHMMSS \
+  --resume-checkpoint best_eval \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc \
+  --teacher-mode off \
+  --total-timesteps 20000000 \
+  --lr-initial 8e-5 \
+  --lr-final 3e-5 \
+  --ent-coef 0.001 \
+  --clip-range 0.15 \
+  --gamma 0.999 \
+  --gae-lambda 0.97 \
+  --eval-drop-stop-pct 8 \
+  --eval-drop-stop-patience 3
+```
+
+Teacher curriculum run on top of dense DPS deltas:
+
+```bash
+uv run python rl_train_v2.py \
+  --mode train \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc \
+  --num-envs 12 \
+  --total-timesteps 16000000 \
+  --dps-reward-mode delta \
+  --teacher-mode reward \
+  --teacher-schedule linear \
+  --teacher-start-weight 1.0 \
+  --teacher-end-weight 0.0 \
+  --teacher-anneal-steps 12800000 \
+  --teacher-reward-scale 100000 \
+  --teacher-update-freq 1000 \
+  --teacher-off-stabilize \
+  --teacher-off-adaptive \
+  --teacher-off-adaptive-steps 1000000 \
+  --teacher-off-min-lr 5e-5 \
+  --teacher-off-ent-coef-scale 2.0 \
+  --teacher-off-ent-coef-max 0.03 \
+  --lr-initial 2.5e-4 \
+  --lr-final 2.5e-5 \
+  --clip-range 0.2 \
+  --gamma 1.0 \
+  --gae-lambda 1.0 \
+  --eval-drop-stop-pct 8 \
+  --eval-drop-stop-patience 3
+```
+
+Teacher curriculum (gradual linear transition, defaults shown):
+
+```bash
+uv run python rl_train_v2.py \
+  --mode train \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc \
+  --teacher-mode reward \
+  --teacher-schedule linear \
+  --teacher-start-weight 1.0 \
+  --teacher-end-weight 0.0 \
+  --teacher-anneal-steps 0 \
+  --teacher-reward-scale 250000 \
+  --teacher-update-freq 1000
+```
+
+Teacher curriculum (sudden switch):
+
+```bash
+uv run python rl_train_v2.py \
+  --mode train \
+  --simc ../../../out/build/x64-Release/simc.exe \
+  --profile ./simc_profiles/druid_feral.simc \
+  --teacher-mode reward \
+  --teacher-schedule hard \
+  --teacher-start-weight 1.0 \
+  --teacher-end-weight 0.0 \
+  --teacher-switch-step 4000000 \
+  --teacher-reward-scale 250000
+```
+
+Teacher curriculum flag semantics (v2):
+- `--dps-reward-mode {delta,sparse}`
+  - `delta`: default. Per-step SimC damage deltas are used and summed over the episode.
+  - With `--gamma 1.0`, `delta` is return-equivalent to terminal total damage, but with much better credit assignment.
+  - `sparse`: only terminal DPS reward (`total_damage`) is used.
+- `--teacher-mode {off,reward}`
+  - `off`: no teacher reward, policy trains on DPS reward mode only.
+  - `reward`: enable teacher-match reward and blend it with DPS reward.
+- `--teacher-schedule {linear,hard}`
+  - `linear`: teacher weight `w` interpolates from start to end over `anneal_steps`.
+  - `hard`: teacher weight is `start` before `switch_step`, then `end` after.
+- `--teacher-start-weight` / `--teacher-end-weight`
+  - Blend weight range for teacher signal. Both are clamped to `[0, 1]`.
+  - Reward blend is: `r = (1 - w) * r_dps + w * r_teacher`.
+- `--teacher-anneal-steps`
+  - Used only for `linear`.
+  - `0` means auto: `total_timesteps`.
+  - Why `0` default: with sparse terminal DPS reward, full-run anneal avoids an abrupt handoff.
+  - If you want a pure-DPS tail while keeping smooth handoff, set it below total timesteps (example: `0.8 * total_timesteps`).
+- `--teacher-switch-step`
+  - Used only for `hard`.
+  - `0` means auto: `total_timesteps // 3`.
+- `--teacher-reward-scale`
+  - Exact-match bonus per decision when chosen action equals teacher action.
+  - `r_teacher = teacher_reward_scale` on match, otherwise `0`.
+- `--teacher-update-freq`
+  - How often (global learner timesteps) the trainer pushes a new teacher weight to all subprocess envs via `env_method`.
+  - Lower = closer tracking of the schedule but more IPC overhead.
+  - Higher = cheaper but weight changes occur in larger jumps.
+- `--teacher-off-stabilize`
+  - Optional PPO stabilization at first timestep where teacher weight reaches `0`.
+  - One-shot mode (default):
+    - LR scaling by `--teacher-off-lr-scale` (default `0.2`)
+    - clip range override to `--teacher-off-clip-range` (default `0.1`)
+  - Adaptive mode (`--teacher-off-adaptive`):
+    - lasts `--teacher-off-adaptive-steps` timesteps (default `1000000`)
+    - clamps LR with floor `--teacher-off-min-lr` (default `5e-5`)
+    - boosts entropy by `--teacher-off-ent-coef-scale` (default `2.0`) up to `--teacher-off-ent-coef-max` (default `0.03`)
+    - restores original PPO schedules after the adaptive window ends
+  - Intended to reduce collapse risk when switching from dense teacher signal to sparse terminal DPS-only learning.
+- `--eval-drop-stop-pct`
+  - Optional regression guard based on held-out eval damage.
+  - If eval damage drops by this percentage from best and stays degraded for `--eval-drop-stop-patience` consecutive evals, training is stopped automatically.
+  - `0` disables this guard.
+- `--eval-drop-stop-patience`
+  - Number of consecutive degraded eval passes required before stopping.
+
+Reward behavior in v2 training:
+- Reward blend at each step: `r = (1 - w) * r_dps + w * r_teacher`.
+- Teacher term:
+  - `r_teacher = teacher_reward_scale` on teacher match, else `0`.
+- DPS term depends on `--dps-reward-mode`:
+  - `sparse`:
+    - non-terminal: `r_dps = 0`
+    - terminal: `r_dps = total_damage`
+  - `delta`:
+    - non-terminal: `r_dps = simc_step_damage_delta`
+    - terminal: tail delta so episode sum equals `total_damage`
+
+Choosing `--teacher-reward-scale`:
+- Start around `100000` for Feral-sized profiles.
+- Increase toward `250000` if agent ignores teacher actions early.
+- Decrease toward `50000` if teacher dominates for too long and DPS pickup is delayed after anneal.
+- Keep schedule in mind: high start weight (`w`) plus high scale makes early learning almost pure imitation by design.
 
 ## 2) Prepare a profile
 
@@ -383,7 +579,10 @@ simc my_profile.simc rl_enable=1 rl_stdio=1 rl_trace=0 max_time=300 iterations=1
 - Process blocks waiting:
   - Python must write exactly one integer action per step.
 - Unstable training:
-  - Use intermediate rewards in Python (`intermediate_rewards=True`).
+  - For v2 teacher curriculum, tune `--teacher-reward-scale` and anneal settings before changing PPO hyperparameters.
+- Dense delta reward is the default and recommended v2 training mode.
+- If you explicitly experiment with sparse terminal reward and it collapses, switch back to `--dps-reward-mode delta` and use `--gamma 1.0 --gae-lambda 1.0`.
+  - If running legacy `rl_bridge.py`, intermediate rewards can still help (`intermediate_rewards=True` in that script).
   - Start with a reduced action space via Python blacklist if needed.
 - Buff/Dot features always zero:
   - Verify `rl_observe_buffs` / `rl_observe_dots` labels match tokenized simc names.

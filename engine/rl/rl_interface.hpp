@@ -56,6 +56,8 @@ struct step_input_t
   const player_t* player = nullptr;
   observation_t observation;
   action_space_view_t action_space;
+  int teacher_idx = -1;
+  std::string teacher_label;
   double reward = 0.0;
 };
 

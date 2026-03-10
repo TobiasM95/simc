@@ -291,6 +291,8 @@ void write_step_json_to_stream( std::ostream& out, const rl::step_input_t& input
   out << "\"ttd\":" << input.observation.target_ttd_s << ",";
   out << "\"gcd_rem\":" << input.observation.gcd_remaining_s << ",";
   out << "\"reward\":" << input.reward << ",";
+  out << "\"teacher_idx\":" << input.teacher_idx << ",";
+  out << "\"teacher_label\":\"" << json_escape( input.teacher_label ) << "\",";
   out << "\"spec_id\":" << input.observation.spec_id << ",";
 
   out << "\"resource_pct\":[";
@@ -696,6 +698,8 @@ void trace_decision( const step_input_t& input, std::size_t chosen_index )
   ( *out ) << "\"ttd\":" << input.observation.target_ttd_s << ",";
   ( *out ) << "\"gcd_rem\":" << input.observation.gcd_remaining_s << ",";
   ( *out ) << "\"reward\":" << input.reward << ",";
+  ( *out ) << "\"teacher_idx\":" << input.teacher_idx << ",";
+  ( *out ) << "\"teacher_label\":\"" << json_escape( input.teacher_label ) << "\",";
   ( *out ) << "\"n\":" << input.action_space.actions.size() << ",";
   ( *out ) << "\"chosen\":" << chosen_index << ",";
   ( *out ) << "\"chosen_label\":\"" << json_escape( chosen_label ) << "\",";

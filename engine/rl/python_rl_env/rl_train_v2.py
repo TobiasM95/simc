@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -38,6 +39,42 @@ NOOP_LABELS = {
 }
 
 
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _mix_rewards(
+    dps_reward: float,
+    teacher_match: bool,
+    teacher_weight: float,
+    teacher_reward_scale: float,
+) -> tuple[float, float]:
+    teacher_reward = float(teacher_reward_scale) if teacher_match else 0.0
+    w = _clamp01(teacher_weight)
+    mixed = (1.0 - w) * float(dps_reward) + w * teacher_reward
+    return mixed, teacher_reward
+
+
+def _teacher_weight_for_step(
+    teacher_schedule: str,
+    teacher_start_weight: float,
+    teacher_end_weight: float,
+    teacher_anneal_steps: int,
+    teacher_switch_step: int,
+    timestep: int,
+) -> float:
+    step = max(0, int(timestep))
+    start_w = _clamp01(teacher_start_weight)
+    end_w = _clamp01(teacher_end_weight)
+
+    if teacher_schedule == "hard":
+        return start_w if step < max(0, int(teacher_switch_step)) else end_w
+
+    anneal = max(1, int(teacher_anneal_steps))
+    frac = min(1.0, step / float(anneal))
+    return _clamp01(start_w + frac * (end_w - start_w))
+
+
 class EpisodeSeedManager:
     """Deterministic seed stream per worker, if base_seed is set."""
 
@@ -60,6 +97,7 @@ class ObsConfig:
     num_buffs: int
     num_dots: int
     action_index_map: list[int]
+    raw_to_filtered_index_map: list[int]
     filtered_labels: list[str]
     noop_filtered_indices: list[int]
 
@@ -80,6 +118,9 @@ class SimcEnvV2(gym.Env):
         action_blacklist: Optional[set[str]] = None,
         show_simc_stderr: bool = False,
         no_op_strategy: str = "mask_when_real",
+        teacher_mode: str = "off",
+        teacher_reward_scale: float = 250000.0,
+        teacher_weight: float = 0.0,
     ):
         super().__init__()
         self.simc_path = simc_path
@@ -91,6 +132,9 @@ class SimcEnvV2(gym.Env):
         self.show_simc_stderr = show_simc_stderr
         self._action_blacklist = action_blacklist or set()
         self._no_op_strategy = no_op_strategy
+        self._teacher_mode = teacher_mode
+        self._teacher_reward_scale = float(teacher_reward_scale)
+        self._teacher_weight = _clamp01(float(teacher_weight))
 
         self._process: Optional[subprocess.Popen] = None
         self._current_state: Optional[dict[str, Any]] = None
@@ -108,6 +152,13 @@ class SimcEnvV2(gym.Env):
         self._spaces_initialized = False
         self._initial_ttd: Optional[float] = None
         self._total_reward = 0.0
+        self._current_teacher_filtered_idx = -1
+        self._current_teacher_label = ""
+
+        if self._teacher_mode not in {"off", "reward"}:
+            raise ValueError(
+                f"Invalid teacher_mode '{self._teacher_mode}'. Expected 'off' or 'reward'."
+            )
 
         self._probe_action_space()
 
@@ -125,6 +176,8 @@ class SimcEnvV2(gym.Env):
                 f"max_time={self.fight_length}",
             ]
         )
+        if self._teacher_mode != "off":
+            cmd.append("rl_teacher_enable=1")
         if self._current_simc_seed is not None:
             cmd.append(f"seed={self._current_simc_seed}")
 
@@ -147,6 +200,7 @@ class SimcEnvV2(gym.Env):
             raw_labels = msg.get("labels", [f"action_{i}" for i in range(raw_num_actions)])
 
             action_index_map: list[int] = []
+            raw_to_filtered_index_map: list[int] = [-1] * raw_num_actions
             filtered_labels: list[str] = []
             noop_filtered_indices: list[int] = []
             for i, label in enumerate(raw_labels):
@@ -154,6 +208,7 @@ class SimcEnvV2(gym.Env):
                     continue
                 filtered_idx = len(filtered_labels)
                 action_index_map.append(i)
+                raw_to_filtered_index_map[i] = filtered_idx
                 filtered_labels.append(label)
                 if label in NOOP_LABELS:
                     noop_filtered_indices.append(filtered_idx)
@@ -170,6 +225,7 @@ class SimcEnvV2(gym.Env):
                 num_buffs=num_buffs,
                 num_dots=num_dots,
                 action_index_map=action_index_map,
+                raw_to_filtered_index_map=raw_to_filtered_index_map,
                 filtered_labels=filtered_labels,
                 noop_filtered_indices=noop_filtered_indices,
             )
@@ -280,6 +336,9 @@ class SimcEnvV2(gym.Env):
         self._process.stdin.write(f"{action}\n")
         self._process.stdin.flush()
 
+    def set_teacher_weight(self, weight: float) -> None:
+        self._teacher_weight = _clamp01(weight)
+
     def _apply_noop_mask_policy(
         self, filtered_mask: list[int] | np.ndarray
     ) -> np.ndarray:
@@ -331,10 +390,21 @@ class SimcEnvV2(gym.Env):
         raw_mask = msg["mask"]
         raw_cd_charges = msg["cd_charges_f"]
         raw_cd_rem_n = msg.get("cd_rem_n", [0.0] * raw_num_actions)
+        raw_teacher_idx_value = msg.get("teacher_idx", -1)
+        try:
+            raw_teacher_idx = int(raw_teacher_idx_value)
+        except (TypeError, ValueError):
+            raw_teacher_idx = -1
 
         filtered_mask = [raw_mask[i] for i in self._config.action_index_map]
         filtered_cd_charges = [raw_cd_charges[i] for i in self._config.action_index_map]
         filtered_cd_rem_n = [raw_cd_rem_n[i] for i in self._config.action_index_map]
+        teacher_filtered_idx = -1
+        if 0 <= raw_teacher_idx < len(self._config.raw_to_filtered_index_map):
+            teacher_filtered_idx = self._config.raw_to_filtered_index_map[raw_teacher_idx]
+        self._current_teacher_filtered_idx = int(teacher_filtered_idx)
+        teacher_label = msg.get("teacher_label", "")
+        self._current_teacher_label = teacher_label if isinstance(teacher_label, str) else ""
 
         mask = self._apply_noop_mask_policy(filtered_mask)
 
@@ -401,6 +471,8 @@ class SimcEnvV2(gym.Env):
         self._current_simc_seed = self._seed_manager.next_seed()
         self._start_process()
         self._total_reward = 0.0
+        self._current_teacher_filtered_idx = -1
+        self._current_teacher_label = ""
 
         msg = self._read_message()
         if msg.get("type") == "done":
@@ -416,6 +488,9 @@ class SimcEnvV2(gym.Env):
             "spec_id": self._spec_id,
             "buff_labels": self._buff_labels,
             "dot_labels": self._dot_labels,
+            "teacher_idx": self._current_teacher_filtered_idx,
+            "teacher_label": self._current_teacher_label,
+            "teacher_weight": self._teacher_weight,
             "simc_seed": self._current_simc_seed,
         }
         return obs, info
@@ -428,6 +503,10 @@ class SimcEnvV2(gym.Env):
 
         if action < 0 or action >= len(self._config.action_index_map):
             raise ValueError(f"Invalid action {action}")
+
+        teacher_idx = int(self._current_teacher_filtered_idx)
+        teacher_label = self._current_teacher_label
+        teacher_match = teacher_idx >= 0 and action == teacher_idx
 
         raw_action = self._config.action_index_map[action]
         self._send_action(raw_action)
@@ -444,6 +523,15 @@ class SimcEnvV2(gym.Env):
                 if self.intermediate_rewards
                 else total_damage
             )
+            mixed_reward = reward
+            teacher_reward = 0.0
+            if self._teacher_mode == "reward":
+                mixed_reward, teacher_reward = _mix_rewards(
+                    dps_reward=reward,
+                    teacher_match=teacher_match,
+                    teacher_weight=self._teacher_weight,
+                    teacher_reward_scale=self._teacher_reward_scale,
+                )
 
             obs_dim = self.observation_space["obs"].shape[0]
             obs = {
@@ -456,15 +544,30 @@ class SimcEnvV2(gym.Env):
                 "total_damage": total_damage,
                 "fight_length": fight_length,
                 "episode_end": True,
+                "teacher_idx": teacher_idx,
+                "teacher_label": teacher_label,
+                "teacher_match": teacher_match,
+                "teacher_reward": teacher_reward,
+                "dps_reward": reward,
+                "teacher_weight": self._teacher_weight,
                 "simc_seed": self._current_simc_seed,
             }
             self._close_process()
-            return obs, reward, True, False, info
+            return obs, mixed_reward, True, False, info
 
         self._current_state = msg
         obs, mask = self._parse_state(msg)
-        reward = float(msg.get("reward", 0.0)) if self.intermediate_rewards else 0.0
-        self._total_reward += reward
+        dps_reward = float(msg.get("reward", 0.0)) if self.intermediate_rewards else 0.0
+        self._total_reward += dps_reward
+        reward = dps_reward
+        teacher_reward = 0.0
+        if self._teacher_mode == "reward":
+            reward, teacher_reward = _mix_rewards(
+                dps_reward=dps_reward,
+                teacher_match=teacher_match,
+                teacher_weight=self._teacher_weight,
+                teacher_reward_scale=self._teacher_reward_scale,
+            )
 
         info = {
             "mask": mask,
@@ -475,6 +578,12 @@ class SimcEnvV2(gym.Env):
                 if action < len(self._config.filtered_labels)
                 else "unknown"
             ),
+            "teacher_idx": teacher_idx,
+            "teacher_label": teacher_label,
+            "teacher_match": teacher_match,
+            "teacher_reward": teacher_reward,
+            "dps_reward": dps_reward,
+            "teacher_weight": self._teacher_weight,
             "simc_seed": self._current_simc_seed,
         }
         return obs, reward, False, False, info
@@ -510,6 +619,10 @@ def make_vec_env_v2(
     show_simc_stderr: bool,
     no_op_strategy: str,
     fight_length: float,
+    dps_reward_mode: str,
+    teacher_mode: str,
+    teacher_reward_scale: float,
+    teacher_initial_weight: float,
 ):
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -522,10 +635,14 @@ def make_vec_env_v2(
                 action_blacklist=action_blacklist,
                 seed=base_seed,
                 worker_id=worker_id,
-                intermediate_rewards=True,
+                # "delta" decomposes terminal damage into per-step deltas.
+                intermediate_rewards=(dps_reward_mode == "delta"),
                 show_simc_stderr=show_simc_stderr,
                 no_op_strategy=no_op_strategy,
                 fight_length=fight_length,
+                teacher_mode=teacher_mode,
+                teacher_reward_scale=teacher_reward_scale,
+                teacher_weight=teacher_initial_weight,
             )
             return Monitor(env)
 
@@ -544,17 +661,56 @@ class LinearSchedule:
         return self.initial_value + progress * (self.final_value - self.initial_value)
 
 
+class ConstantSchedule:
+    """Pickle-safe constant schedule wrapper for SB3 model attributes."""
+
+    def __init__(self, value: float):
+        self.value = float(value)
+
+    def __call__(self, _progress_remaining: float) -> float:
+        return self.value
+
+
+class MinClampedSchedule:
+    """Pickle-safe lower-bounded wrapper around an existing schedule."""
+
+    def __init__(self, base_schedule, min_value: float):
+        self.base_schedule = base_schedule
+        self.min_value = float(min_value)
+
+    def __call__(self, progress_remaining: float) -> float:
+        return max(self.min_value, float(self.base_schedule(progress_remaining)))
+
+
 class TrainingCallback:
     def __init__(
         self,
         model_dir: Path,
         vec_normalize_env,
         eval_env: SimcEnvV2,
+        total_timesteps: int,
         eval_freq: int,
         eval_episodes: int,
         save_freq: int,
         train_log_freq: int,
         resume: bool,
+        teacher_mode: str,
+        teacher_schedule: str,
+        teacher_start_weight: float,
+        teacher_end_weight: float,
+        teacher_anneal_steps: int,
+        teacher_switch_step: int,
+        teacher_update_freq: int,
+        teacher_off_stabilize: bool,
+        teacher_off_lr_scale: float,
+        teacher_off_clip_range: float,
+        teacher_off_adaptive: bool,
+        teacher_off_adaptive_steps: int,
+        teacher_off_min_lr: float,
+        teacher_off_ent_coef_scale: float,
+        teacher_off_ent_coef_max: float,
+        eval_drop_stop_pct: float,
+        eval_drop_stop_patience: int,
         verbose: int = 1,
     ):
         from stable_baselines3.common.callbacks import BaseCallback
@@ -578,9 +734,51 @@ class TrainingCallback:
         self.eval_episodes = eval_episodes
         self.save_freq = save_freq
         self.train_log_freq = train_log_freq
+        self.total_timesteps = int(total_timesteps)
+        self.teacher_mode = teacher_mode
+        self.teacher_schedule = teacher_schedule
+        self.teacher_start_weight = _clamp01(teacher_start_weight)
+        self.teacher_end_weight = _clamp01(teacher_end_weight)
+        # For sparse-terminal DPS reward, phasing teacher over the full run is a safer default.
+        auto_anneal_steps = max(1, self.total_timesteps)
+        auto_switch_step = max(1, self.total_timesteps // 3)
+        self.teacher_anneal_steps = (
+            int(teacher_anneal_steps)
+            if int(teacher_anneal_steps) > 0
+            else auto_anneal_steps
+        )
+        self.teacher_switch_step = (
+            int(teacher_switch_step)
+            if int(teacher_switch_step) > 0
+            else auto_switch_step
+        )
+        self.teacher_update_freq = max(1, int(teacher_update_freq))
+        self._teacher_curriculum_enabled = self.teacher_mode == "reward"
+        self._next_teacher_update_timestep = 0
+        self._last_teacher_weight: Optional[float] = None
+        self.teacher_off_stabilize = bool(teacher_off_stabilize)
+        self.teacher_off_lr_scale = max(0.0, float(teacher_off_lr_scale))
+        self.teacher_off_clip_range = max(0.0, float(teacher_off_clip_range))
+        self.teacher_off_adaptive = bool(teacher_off_adaptive)
+        self.teacher_off_adaptive_steps = max(1, int(teacher_off_adaptive_steps))
+        self.teacher_off_min_lr = max(0.0, float(teacher_off_min_lr))
+        self.teacher_off_ent_coef_scale = max(0.0, float(teacher_off_ent_coef_scale))
+        self.teacher_off_ent_coef_max = max(0.0, float(teacher_off_ent_coef_max))
+        self.eval_drop_stop_pct = max(0.0, float(eval_drop_stop_pct))
+        self.eval_drop_stop_patience = max(1, int(eval_drop_stop_patience))
+        self._eval_drop_streak = 0
+        self._teacher_off_stabilized = False
+        self._teacher_off_active_until_timestep: Optional[int] = None
+        self._teacher_off_original_lr_schedule = None
+        self._teacher_off_original_clip_range = None
+        self._teacher_off_original_ent_coef: Optional[float] = None
         self.best_eval = float("-inf")
         self._episode_rewards: list[float] = []
         self._episode_lengths: list[float] = []
+        self._terminal_dps_rewards: list[float] = []
+        self._terminal_teacher_rewards: list[float] = []
+        self._terminal_teacher_weighted_rewards: list[float] = []
+        self._terminal_teacher_matches: list[float] = []
         self._csv_train = model_dir / "training_metrics.csv"
         self._csv_eval = model_dir / "eval_metrics.csv"
 
@@ -619,7 +817,168 @@ class TrainingCallback:
                     ]
                 )
 
+        if self.teacher_mode not in {"off", "reward"}:
+            raise ValueError(
+                f"Invalid teacher_mode '{self.teacher_mode}'. Expected 'off' or 'reward'."
+            )
+        if self.teacher_schedule not in {"linear", "hard"}:
+            raise ValueError(
+                f"Invalid teacher_schedule '{self.teacher_schedule}'. Expected 'linear' or 'hard'."
+            )
+
+        if self._teacher_curriculum_enabled:
+            # First update is performed against callback-provided num_timesteps on first step.
+            self._next_teacher_update_timestep = 0
+            if self.verbose:
+                print(
+                    f"[teacher] schedule={self.teacher_schedule} start={self.teacher_start_weight:.3f} "
+                    f"end={self.teacher_end_weight:.3f} anneal_steps={self.teacher_anneal_steps} "
+                    f"switch_step={self.teacher_switch_step} update_freq={self.teacher_update_freq}"
+                )
+            if (
+                self.teacher_schedule == "linear"
+                and self.teacher_end_weight <= 0.0
+                and self.teacher_anneal_steps < self.total_timesteps
+                and self.verbose
+            ):
+                print(
+                    "[teacher][warn] linear schedule reaches w=0 before training end "
+                    f"(anneal_steps={self.teacher_anneal_steps}, total_timesteps={self.total_timesteps})."
+                )
+            if (
+                self.teacher_schedule == "hard"
+                and self.teacher_end_weight <= 0.0
+                and self.teacher_switch_step < self.total_timesteps
+                and self.verbose
+            ):
+                print(
+                    "[teacher][warn] hard schedule switches to w=0 before training end "
+                    f"(switch_step={self.teacher_switch_step}, total_timesteps={self.total_timesteps})."
+                )
+        if self.eval_drop_stop_pct > 0.0 and self.verbose:
+            print(
+                "[eval-guard] enabled: stop when held-out eval drops below "
+                f"{100.0 - self.eval_drop_stop_pct:.1f}% of best for "
+                f"{self.eval_drop_stop_patience} consecutive evals"
+            )
+
         self.callback = _Callback(self)
+
+    def _teacher_weight_at_step(self, timestep: int) -> float:
+        return _teacher_weight_for_step(
+            teacher_schedule=self.teacher_schedule,
+            teacher_start_weight=self.teacher_start_weight,
+            teacher_end_weight=self.teacher_end_weight,
+            teacher_anneal_steps=self.teacher_anneal_steps,
+            teacher_switch_step=self.teacher_switch_step,
+            timestep=timestep,
+        )
+
+    def _update_teacher_weight_if_needed(self, cb) -> None:
+        if not self._teacher_curriculum_enabled:
+            return
+        if cb.num_timesteps < self._next_teacher_update_timestep:
+            return
+
+        weight = self._teacher_weight_at_step(cb.num_timesteps)
+        self.vec_normalize_env.env_method("set_teacher_weight", weight)
+        self._last_teacher_weight = weight
+        self._next_teacher_update_timestep = cb.num_timesteps + self.teacher_update_freq
+        # if self.verbose:
+        #     print(f"[teacher] timesteps={cb.num_timesteps:,} weight={weight:.3f}")
+        if (
+            self.teacher_off_stabilize
+            and not self._teacher_off_stabilized
+            and weight <= 0.0
+        ):
+            self._apply_teacher_off_stabilization(cb)
+
+    def _apply_teacher_off_stabilization(self, cb) -> None:
+        progress_remaining = float(getattr(cb.model, "_current_progress_remaining", 1.0))
+        current_lr = float(cb.model.lr_schedule(progress_remaining))
+        if self.teacher_off_adaptive:
+            self._teacher_off_original_lr_schedule = cb.model.lr_schedule
+            self._teacher_off_original_clip_range = cb.model.clip_range
+            self._teacher_off_original_ent_coef = float(cb.model.ent_coef)
+
+            cb.model.lr_schedule = MinClampedSchedule(
+                self._teacher_off_original_lr_schedule, self.teacher_off_min_lr
+            )
+            if self.teacher_off_clip_range > 0.0:
+                cb.model.clip_range = ConstantSchedule(self.teacher_off_clip_range)
+
+            boosted_ent_coef = min(
+                self._teacher_off_original_ent_coef * self.teacher_off_ent_coef_scale,
+                self.teacher_off_ent_coef_max,
+            )
+            cb.model.ent_coef = boosted_ent_coef
+
+            adaptive_lr = float(cb.model.lr_schedule(progress_remaining))
+            cb.model.learning_rate = adaptive_lr
+            for param_group in cb.model.policy.optimizer.param_groups:
+                param_group["lr"] = adaptive_lr
+
+            self._teacher_off_active_until_timestep = (
+                cb.num_timesteps + self.teacher_off_adaptive_steps
+            )
+            self._teacher_off_stabilized = True
+            if self.verbose:
+                print(
+                    f"[teacher-off] adaptive stabilization active at timesteps={cb.num_timesteps:,} "
+                    f"until={self._teacher_off_active_until_timestep:,}: "
+                    f"lr_floor={self.teacher_off_min_lr:.3e}, "
+                    f"clip_range={self.teacher_off_clip_range:.3f}, "
+                    f"ent_coef {self._teacher_off_original_ent_coef:.4f} -> {boosted_ent_coef:.4f}"
+                )
+            return
+
+        new_lr = max(1e-8, current_lr * self.teacher_off_lr_scale)
+        new_clip = self.teacher_off_clip_range
+
+        cb.model.learning_rate = new_lr
+        cb.model.lr_schedule = ConstantSchedule(new_lr)
+        cb.model.clip_range = ConstantSchedule(new_clip)
+        for param_group in cb.model.policy.optimizer.param_groups:
+            param_group["lr"] = new_lr
+
+        self._teacher_off_stabilized = True
+        if self.verbose:
+            print(
+                f"[teacher-off] applied PPO stabilization at timesteps={cb.num_timesteps:,}: "
+                f"lr {current_lr:.3e} -> {new_lr:.3e}, clip_range -> {new_clip:.3f}"
+            )
+
+    def _update_teacher_off_adaptive_phase(self, cb) -> None:
+        if self._teacher_off_active_until_timestep is None:
+            return
+
+        progress_remaining = float(getattr(cb.model, "_current_progress_remaining", 1.0))
+        current_lr = float(cb.model.lr_schedule(progress_remaining))
+        cb.model.learning_rate = current_lr
+        for param_group in cb.model.policy.optimizer.param_groups:
+            param_group["lr"] = current_lr
+
+        if cb.num_timesteps < self._teacher_off_active_until_timestep:
+            return
+
+        if self._teacher_off_original_lr_schedule is not None:
+            cb.model.lr_schedule = self._teacher_off_original_lr_schedule
+        if self._teacher_off_original_clip_range is not None:
+            cb.model.clip_range = self._teacher_off_original_clip_range
+        if self._teacher_off_original_ent_coef is not None:
+            cb.model.ent_coef = self._teacher_off_original_ent_coef
+
+        restored_lr = float(cb.model.lr_schedule(progress_remaining))
+        cb.model.learning_rate = restored_lr
+        for param_group in cb.model.policy.optimizer.param_groups:
+            param_group["lr"] = restored_lr
+
+        self._teacher_off_active_until_timestep = None
+        if self.verbose:
+            print(
+                f"[teacher-off] adaptive stabilization ended at timesteps={cb.num_timesteps:,}: "
+                f"restored_lr={restored_lr:.3e}, ent_coef={float(cb.model.ent_coef):.4f}"
+            )
 
     def _run_eval(self, cb) -> tuple[float, float]:
         damages: list[float] = []
@@ -637,7 +996,24 @@ class TrainingCallback:
 
         return float(np.mean(damages)), float(np.std(damages))
 
+    def _safe_save_model(self, cb, path: Path, label: str) -> None:
+        try:
+            cb.model.save(path)
+        except Exception as exc:
+            if self.verbose:
+                print(f"[save-warn] failed to save {label} model to {path}: {exc}")
+
+    def _safe_save_vecnorm(self, path: Path, label: str) -> None:
+        try:
+            self.vec_normalize_env.save(str(path))
+        except Exception as exc:
+            if self.verbose:
+                print(f"[save-warn] failed to save {label} vecnorm to {path}: {exc}")
+
     def on_step(self, cb) -> bool:
+        self._update_teacher_weight_if_needed(cb)
+        self._update_teacher_off_adaptive_phase(cb)
+
         infos = cb.locals.get("infos")
         if infos:
             for info in infos:
@@ -645,6 +1021,17 @@ class TrainingCallback:
                 if ep:
                     self._episode_rewards.append(float(ep["r"]))
                     self._episode_lengths.append(float(ep["l"]))
+                if info.get("episode_end"):
+                    self._terminal_dps_rewards.append(float(info.get("dps_reward", 0.0)))
+                    teacher_reward = float(info.get("teacher_reward", 0.0))
+                    teacher_weight = float(info.get("teacher_weight", 0.0))
+                    self._terminal_teacher_rewards.append(teacher_reward)
+                    self._terminal_teacher_weighted_rewards.append(
+                        teacher_reward * teacher_weight
+                    )
+                    self._terminal_teacher_matches.append(
+                        1.0 if bool(info.get("teacher_match", False)) else 0.0
+                    )
 
         if cb.n_calls % self.train_log_freq == 0 and self._episode_rewards:
             mean_reward = float(np.mean(self._episode_rewards[-100:]))
@@ -662,10 +1049,35 @@ class TrainingCallback:
                         f"{self.best_eval:.2f}",
                     ]
                 )
+            if self.verbose and self._terminal_dps_rewards:
+                tail = 100
+                mean_terminal_dps = float(np.mean(self._terminal_dps_rewards[-tail:]))
+                mean_terminal_teacher = float(
+                    np.mean(self._terminal_teacher_rewards[-tail:])
+                )
+                mean_terminal_teacher_weighted = float(
+                    np.mean(self._terminal_teacher_weighted_rewards[-tail:])
+                )
+                mean_terminal_match = float(
+                    np.mean(self._terminal_teacher_matches[-tail:])
+                )
+                weight_text = (
+                    f"{self._last_teacher_weight:.3f}"
+                    if self._last_teacher_weight is not None
+                    else "n/a"
+                )
+                print(
+                    f"[train-reward] timesteps={cb.num_timesteps:,} "
+                    f"teacher_w={weight_text} "
+                    f"terminal_dps_mean(last{tail})={mean_terminal_dps:,.0f} "
+                    f"terminal_teacher_bonus_unweighted_mean(last{tail})={mean_terminal_teacher:,.0f} "
+                    f"terminal_teacher_bonus_weighted_mean(last{tail})={mean_terminal_teacher_weighted:,.0f} "
+                    f"terminal_teacher_match_rate(last{tail})={mean_terminal_match:.3f}"
+                )
 
         if cb.n_calls % self.save_freq == 0:
-            cb.model.save(self.model_dir / "latest_model")
-            self.vec_normalize_env.save(str(self.model_dir / "vec_normalize.pkl"))
+            self._safe_save_model(cb, self.model_dir / "latest_model", "latest")
+            self._safe_save_vecnorm(self.model_dir / "vec_normalize.pkl", "latest")
 
         if cb.n_calls % self.eval_freq == 0:
             mean_damage, std_damage = self._run_eval(cb)
@@ -687,11 +1099,39 @@ class TrainingCallback:
                 )
 
             if mean_damage > self.best_eval:
+                self._eval_drop_streak = 0
                 self.best_eval = mean_damage
-                cb.model.save(self.model_dir / "best_eval_model")
-                self.vec_normalize_env.save(str(self.model_dir / "vec_normalize.pkl"))
+                self._safe_save_model(cb, self.model_dir / "best_eval_model", "best_eval")
+                self._safe_save_vecnorm(self.model_dir / "vec_normalize.pkl", "best_eval")
+                self._safe_save_vecnorm(
+                    self.model_dir / "vec_normalize_best_eval.pkl", "best_eval"
+                )
                 if self.verbose:
                     print(f"[eval] New best checkpoint at {mean_damage:,.0f} damage")
+            elif self.eval_drop_stop_pct > 0.0 and self.best_eval > 0.0:
+                stop_threshold = self.best_eval * (1.0 - self.eval_drop_stop_pct / 100.0)
+                if mean_damage < stop_threshold:
+                    self._eval_drop_streak += 1
+                    if self.verbose:
+                        print(
+                            "[eval-guard] drop detected: "
+                            f"current={mean_damage:,.0f} threshold={stop_threshold:,.0f} "
+                            f"streak={self._eval_drop_streak}/{self.eval_drop_stop_patience}"
+                        )
+                    if self._eval_drop_streak >= self.eval_drop_stop_patience:
+                        self._safe_save_model(
+                            cb, self.model_dir / "regression_stop_model", "regression_stop"
+                        )
+                        self._safe_save_vecnorm(
+                            self.model_dir / "vec_normalize.pkl", "regression_stop"
+                        )
+                        if self.verbose:
+                            print(
+                                "[eval-guard] stopping training due to sustained eval regression"
+                            )
+                        return False
+                else:
+                    self._eval_drop_streak = 0
 
         return True
 
@@ -716,15 +1156,18 @@ class TrainingCallback:
 
         if mean_damage > self.best_eval:
             self.best_eval = mean_damage
-            cb.model.save(self.model_dir / "best_eval_model")
-            self.vec_normalize_env.save(str(self.model_dir / "vec_normalize.pkl"))
+            self._safe_save_model(cb, self.model_dir / "best_eval_model", "best_eval")
+            self._safe_save_vecnorm(self.model_dir / "vec_normalize.pkl", "best_eval")
+            self._safe_save_vecnorm(
+                self.model_dir / "vec_normalize_best_eval.pkl", "best_eval"
+            )
             if self.verbose:
                 print(
                     f"[eval-final] New best checkpoint at {mean_damage:,.0f} damage"
                 )
 
-        cb.model.save(self.model_dir / "final_model")
-        self.vec_normalize_env.save(str(self.model_dir / "vec_normalize.pkl"))
+        self._safe_save_model(cb, self.model_dir / "final_model", "final")
+        self._safe_save_vecnorm(self.model_dir / "vec_normalize.pkl", "final")
         if self.verbose:
             print(f"Training complete. Best held-out mean damage: {self.best_eval:,.0f}")
 
@@ -821,6 +1264,26 @@ def load_model_for_eval(model_dir: Path) -> Path:
     raise ValueError(f"No model checkpoint found in {model_dir / 'models'}")
 
 
+def get_resume_model_candidates(model_dir: Path, selector: str) -> list[Path]:
+    latest = model_dir / "latest_model.zip"
+    interrupted = model_dir / "interrupted_model.zip"
+    final = model_dir / "final_model.zip"
+    best_eval = model_dir / "best_eval_model.zip"
+    selectors = {
+        "auto": [latest, interrupted, final, best_eval],
+        "latest": [latest],
+        "interrupted": [interrupted],
+        "final": [final],
+        "best_eval": [best_eval],
+    }
+    if selector not in selectors:
+        raise ValueError(
+            f"Invalid resume checkpoint selector '{selector}'. Expected one of: "
+            f"{', '.join(selectors.keys())}"
+        )
+    return selectors[selector]
+
+
 def run_train(args: argparse.Namespace) -> None:
     import torch
     from sb3_contrib import MaskablePPO
@@ -828,6 +1291,12 @@ def run_train(args: argparse.Namespace) -> None:
     from stable_baselines3.common.vec_env import VecNormalize
 
     action_blacklist = set() if args.no_blacklist else GLOBAL_ACTION_BLACKLIST
+
+    if args.teacher_off_adaptive and not args.teacher_off_stabilize:
+        args.teacher_off_stabilize = True
+        print(
+            "Enabled --teacher-off-stabilize because --teacher-off-adaptive was set."
+        )
 
     resume_dir = Path(args.resume) if args.resume else None
     if resume_dir:
@@ -847,6 +1316,40 @@ def run_train(args: argparse.Namespace) -> None:
     print(f"Output directory: {output_dir}")
     print(f"Num envs: {args.num_envs}")
     print(f"Total timesteps: {args.total_timesteps:,}")
+    if resume_dir:
+        print(f"Resume checkpoint mode: {args.resume_checkpoint}")
+    if args.dps_reward_mode == "delta":
+        print("DPS reward mode: dense per-step damage deltas (sum equals total_damage)")
+        if not np.isclose(float(args.gamma), 1.0):
+            print(
+                f"[reward-warn] dps_reward_mode=delta with gamma={args.gamma} changes objective weighting; "
+                "use --gamma 1.0 for return-equivalent decomposition."
+            )
+    else:
+        print("DPS reward mode: sparse terminal-only (total_damage at episode end)")
+    if args.teacher_mode == "reward":
+        print(
+            f"Teacher curriculum enabled: schedule={args.teacher_schedule} "
+            f"start={args.teacher_start_weight:.3f} end={args.teacher_end_weight:.3f}"
+        )
+        if args.teacher_off_stabilize:
+            print(
+                "Teacher-off PPO stabilization enabled: "
+                f"lr_scale={args.teacher_off_lr_scale}, "
+                f"clip_range={args.teacher_off_clip_range}"
+            )
+            if args.teacher_off_adaptive:
+                print(
+                    "Teacher-off adaptive phase: "
+                    f"steps={args.teacher_off_adaptive_steps}, "
+                    f"min_lr={args.teacher_off_min_lr}, "
+                    f"ent_coef_scale={args.teacher_off_ent_coef_scale}, "
+                    f"ent_coef_max={args.teacher_off_ent_coef_max}"
+                )
+
+    teacher_initial_weight = (
+        _clamp01(args.teacher_start_weight) if args.teacher_mode == "reward" else 0.0
+    )
 
     envs = make_vec_env_v2(
         num_envs=args.num_envs,
@@ -857,12 +1360,41 @@ def run_train(args: argparse.Namespace) -> None:
         show_simc_stderr=args.show_simc_stderr,
         no_op_strategy=args.no_op_strategy,
         fight_length=args.fight_length,
+        dps_reward_mode=args.dps_reward_mode,
+        teacher_mode=args.teacher_mode,
+        teacher_reward_scale=args.teacher_reward_scale,
+        teacher_initial_weight=teacher_initial_weight,
     )
 
-    vec_norm_path = model_dir / "vec_normalize.pkl"
-    if resume_dir and vec_norm_path.exists():
-        print(f"Loading VecNormalize stats from {vec_norm_path}")
-        envs = VecNormalize.load(str(vec_norm_path), envs)
+    resume_candidates: list[Path] = []
+    if resume_dir:
+        resume_candidates = get_resume_model_candidates(model_dir, args.resume_checkpoint)
+        if args.resume_checkpoint != "auto":
+            print(f"Resume checkpoint selector: {args.resume_checkpoint}")
+
+    vec_norm_latest = model_dir / "vec_normalize.pkl"
+    vec_norm_best_eval = model_dir / "vec_normalize_best_eval.pkl"
+    vec_norm_resume = vec_norm_latest
+    if (
+        resume_dir
+        and args.resume_checkpoint == "best_eval"
+        and vec_norm_best_eval.exists()
+    ):
+        vec_norm_resume = vec_norm_best_eval
+    elif (
+        resume_dir
+        and args.resume_checkpoint == "best_eval"
+        and not vec_norm_best_eval.exists()
+        and vec_norm_latest.exists()
+    ):
+        print(
+            "[resume-warn] vec_normalize_best_eval.pkl not found; "
+            "falling back to vec_normalize.pkl"
+        )
+
+    if resume_dir and vec_norm_resume.exists():
+        print(f"Loading VecNormalize stats from {vec_norm_resume}")
+        envs = VecNormalize.load(str(vec_norm_resume), envs)
         envs.training = True
     else:
         envs = VecNormalize(
@@ -877,20 +1409,42 @@ def run_train(args: argparse.Namespace) -> None:
 
     model = None
     if resume_dir:
-        model_candidates = [
-            model_dir / "best_eval_model.zip",
-            model_dir / "final_model.zip",
-            model_dir / "interrupted_model.zip",
-            model_dir / "latest_model.zip",
-        ]
-        for candidate in model_candidates:
+        for candidate in resume_candidates:
             if candidate.exists():
+                if not zipfile.is_zipfile(candidate):
+                    print(f"[resume-warn] Skipping invalid checkpoint (not zip): {candidate}")
+                    continue
+                if (
+                    candidate.name == "best_eval_model.zip"
+                    and args.resume_checkpoint == "auto"
+                    and vec_norm_best_eval.exists()
+                    and vec_norm_resume != vec_norm_best_eval
+                ):
+                    print(
+                        "[resume] Loading best-eval checkpoint with "
+                        f"{vec_norm_resume.name}; use --resume-checkpoint best_eval "
+                        "to pair it with vec_normalize_best_eval.pkl"
+                    )
                 print(f"Loading model from {candidate}")
-                model = MaskablePPO.load(
-                    str(candidate), env=envs, tensorboard_log=str(log_dir)
-                )
+                try:
+                    model = MaskablePPO.load(
+                        str(candidate), env=envs, tensorboard_log=str(log_dir)
+                    )
+                except Exception as exc:
+                    print(f"[resume-warn] Failed to load checkpoint {candidate}: {exc}")
+                    continue
                 model.set_logger(logger)
+                print(
+                    f"[resume] Loaded checkpoint {candidate.name} with "
+                    f"num_timesteps={model.num_timesteps:,}"
+                )
                 break
+        if model is None:
+            searched = ", ".join(str(p.name) for p in resume_candidates)
+            raise ValueError(
+                "No valid resume checkpoint could be loaded from "
+                f"{model_dir}. Checked: {searched}"
+            )
 
     if model is None:
         print("Initializing new MaskablePPO v2 model")
@@ -921,24 +1475,45 @@ def run_train(args: argparse.Namespace) -> None:
     eval_env = SimcEnvV2(
         simc_path=args.simc,
         profile=args.profile,
+        simc_args=["rl_teacher_enable=0"],
         action_blacklist=action_blacklist,
         seed=(args.seed + 2_000_000) if args.seed is not None else None,
         worker_id=0,
-        intermediate_rewards=True,
+        intermediate_rewards=False,
         show_simc_stderr=args.show_simc_stderr,
         no_op_strategy=args.no_op_strategy,
         fight_length=args.fight_length,
+        teacher_mode="off",
+        teacher_weight=0.0,
     )
 
     callback_wrapper = TrainingCallback(
         model_dir=model_dir,
         vec_normalize_env=envs,
         eval_env=eval_env,
+        total_timesteps=args.total_timesteps,
         eval_freq=args.eval_freq,
         eval_episodes=args.eval_episodes,
         save_freq=args.save_freq,
         train_log_freq=args.train_log_freq,
         resume=resume_dir is not None,
+        teacher_mode=args.teacher_mode,
+        teacher_schedule=args.teacher_schedule,
+        teacher_start_weight=args.teacher_start_weight,
+        teacher_end_weight=args.teacher_end_weight,
+        teacher_anneal_steps=args.teacher_anneal_steps,
+        teacher_switch_step=args.teacher_switch_step,
+        teacher_update_freq=args.teacher_update_freq,
+        teacher_off_stabilize=args.teacher_off_stabilize,
+        teacher_off_lr_scale=args.teacher_off_lr_scale,
+        teacher_off_clip_range=args.teacher_off_clip_range,
+        teacher_off_adaptive=args.teacher_off_adaptive,
+        teacher_off_adaptive_steps=args.teacher_off_adaptive_steps,
+        teacher_off_min_lr=args.teacher_off_min_lr,
+        teacher_off_ent_coef_scale=args.teacher_off_ent_coef_scale,
+        teacher_off_ent_coef_max=args.teacher_off_ent_coef_max,
+        eval_drop_stop_pct=args.eval_drop_stop_pct,
+        eval_drop_stop_patience=args.eval_drop_stop_patience,
         verbose=1,
     )
 
@@ -948,11 +1523,18 @@ def run_train(args: argparse.Namespace) -> None:
             callback=callback_wrapper.callback,
             log_interval=1,
             progress_bar=True,
+            reset_num_timesteps=(resume_dir is None),
         )
     except KeyboardInterrupt:
         print("Training interrupted by user")
-        model.save(model_dir / "interrupted_model")
-        envs.save(str(model_dir / "vec_normalize.pkl"))
+        try:
+            model.save(model_dir / "interrupted_model")
+        except Exception as exc:
+            print(f"[save-warn] failed to save interrupted model: {exc}")
+        try:
+            envs.save(str(model_dir / "vec_normalize.pkl"))
+        except Exception as exc:
+            print(f"[save-warn] failed to save interrupted vecnorm: {exc}")
     finally:
         eval_env.close()
         envs.close()
@@ -973,13 +1555,16 @@ def run_eval(args: argparse.Namespace) -> None:
     probe_env = SimcEnvV2(
         simc_path=args.simc,
         profile=args.profile,
+        simc_args=["rl_teacher_enable=0"],
         action_blacklist=action_blacklist,
         seed=args.seed,
         worker_id=0,
-        intermediate_rewards=True,
+        intermediate_rewards=False,
         no_op_strategy=args.no_op_strategy,
         fight_length=args.fight_length,
         show_simc_stderr=args.show_simc_stderr,
+        teacher_mode="off",
+        teacher_weight=0.0,
     )
     if probe_env._config is None:
         raise RuntimeError("Probe failed: missing config")
@@ -998,6 +1583,7 @@ def run_eval(args: argparse.Namespace) -> None:
         "rl_enable=1",
         "rl_stdio=1",
         "rl_trace=0",
+        "rl_teacher_enable=0",
         f"iterations={args.iterations}",
         f"max_time={args.fight_length}",
         f"html={html_output}",
@@ -1111,6 +1697,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile", required=True, help="Path to .simc profile")
 
     parser.add_argument("--resume", type=str, default=None, help="Training run dir to resume")
+    parser.add_argument(
+        "--resume-checkpoint",
+        choices=["auto", "latest", "interrupted", "final", "best_eval"],
+        default="auto",
+        help="Checkpoint selection when --resume is set",
+    )
     parser.add_argument("--model-dir", type=str, default=None, help="Training run dir for eval")
     parser.add_argument("--output-dir", type=str, default=None, help="Eval output directory")
 
@@ -1120,11 +1712,96 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-envs", type=int, default=12)
     parser.add_argument("--total-timesteps", type=int, default=16_000_000)
     parser.add_argument("--seed", type=int, default=12345)
+    parser.add_argument(
+        "--dps-reward-mode",
+        choices=["delta", "sparse"],
+        default="delta",
+        help="DPS reward source for training envs: dense per-step deltas (default) or sparse terminal-only reward",
+    )
+
+    parser.add_argument("--teacher-mode", choices=["off", "reward"], default="off")
+    parser.add_argument(
+        "--teacher-schedule", choices=["linear", "hard"], default="linear"
+    )
+    parser.add_argument("--teacher-start-weight", type=float, default=1.0)
+    parser.add_argument("--teacher-end-weight", type=float, default=0.0)
+    parser.add_argument(
+        "--teacher-anneal-steps",
+        type=int,
+        default=0,
+        help="Linear schedule horizon; 0 uses total_timesteps (set lower for a pure-DPS tail)",
+    )
+    parser.add_argument(
+        "--teacher-switch-step",
+        type=int,
+        default=0,
+        help="Hard-switch boundary; 0 uses total_timesteps // 3",
+    )
+    parser.add_argument("--teacher-reward-scale", type=float, default=250000.0)
+    parser.add_argument("--teacher-update-freq", type=int, default=1000)
+    parser.add_argument(
+        "--teacher-off-stabilize",
+        action="store_true",
+        help="When teacher weight first reaches 0, lower PPO LR and clip_range for sparse-reward stability",
+    )
+    parser.add_argument(
+        "--teacher-off-lr-scale",
+        type=float,
+        default=0.2,
+        help="Multiplier applied to current LR at teacher-off handoff when --teacher-off-stabilize is enabled",
+    )
+    parser.add_argument(
+        "--teacher-off-clip-range",
+        type=float,
+        default=0.1,
+        help="clip_range used after teacher-off handoff when --teacher-off-stabilize is enabled",
+    )
+    parser.add_argument(
+        "--teacher-off-adaptive",
+        action="store_true",
+        help="Use an adaptive post-handoff phase (LR floor + entropy boost) instead of one-shot LR override",
+    )
+    parser.add_argument(
+        "--teacher-off-adaptive-steps",
+        type=int,
+        default=1_000_000,
+        help="Duration of adaptive post-handoff phase in learner timesteps",
+    )
+    parser.add_argument(
+        "--teacher-off-min-lr",
+        type=float,
+        default=5e-5,
+        help="Minimum LR floor applied during adaptive post-handoff phase",
+    )
+    parser.add_argument(
+        "--teacher-off-ent-coef-scale",
+        type=float,
+        default=2.0,
+        help="Entropy coefficient multiplier during adaptive post-handoff phase",
+    )
+    parser.add_argument(
+        "--teacher-off-ent-coef-max",
+        type=float,
+        default=0.03,
+        help="Entropy coefficient cap during adaptive post-handoff phase",
+    )
 
     parser.add_argument("--eval-freq", type=int, default=200_000)
     parser.add_argument("--eval-episodes", type=int, default=32)
     parser.add_argument("--save-freq", type=int, default=50_000)
     parser.add_argument("--train-log-freq", type=int, default=5_000)
+    parser.add_argument(
+        "--eval-drop-stop-pct",
+        type=float,
+        default=0.0,
+        help="Stop training if eval damage stays below this percentage drop from best for consecutive evals (0 disables)",
+    )
+    parser.add_argument(
+        "--eval-drop-stop-patience",
+        type=int,
+        default=3,
+        help="Consecutive degraded evals required to trigger --eval-drop-stop-pct",
+    )
 
     parser.add_argument("--lr-initial", type=float, default=2.5e-4)
     parser.add_argument("--lr-final", type=float, default=2.5e-5)
@@ -1144,7 +1821,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-op-strategy",
         choices=["mask_when_real", "keep_all"],
-        default="mask_when_real",
+        default="keep_all",
         help="How to handle wait/pass pseudo-actions",
     )
 

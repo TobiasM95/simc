@@ -574,6 +574,7 @@ struct sim_t : private sc_thread_t
   double scaling_normalized;
   bool merge_enemy_priority_dmg;
   bool rl_enable;
+  bool rl_teacher_enable;
   bool rl_trace;
   std::string rl_trace_file;
   bool rl_stdio;
